@@ -65,7 +65,10 @@ export default function ARScanGate({ onFound, onBack }) {
 
       setStatus('Starting camera...');
       await mindarThree.start();
-      if (destroyed) { mindarThree.stop().catch(() => {}); return; }
+      // stop() di mind-ar SYNCHRONOUS, balikin undefined (bukan Promise) —
+      // `.catch()` di baris ini nge-throw TypeError kalau dipanggil apa
+      // adanya. try/catch biasa, bukan promise chain.
+      if (destroyed) { try { mindarThree.stop(); } catch { /* ignore */ } return; }
 
       setStatus('Scanning... (arahkan ke cover album)');
       setReady(true);
@@ -81,7 +84,12 @@ export default function ARScanGate({ onFound, onBack }) {
       clearTimeout(foundTimer);
       if (mindarThree) {
         mindarThree.renderer?.setAnimationLoop(null);
-        mindarThree.stop().catch(() => {});
+        // Sama kayak di atas: stop() sync & gak balikin Promise, jangan
+        // .catch() ini. Ini bug yg bikin transisi ke Preview3D crash total
+        // (React unmount seluruh root krn error gak ke-tangkep di effect
+        // cleanup → layar item jadi hitam polos) — root cause "gelap hitam
+        // aja" pas abis scan.
+        try { mindarThree.stop(); } catch { /* ignore */ }
       }
     };
   }, [onFound]);

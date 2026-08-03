@@ -286,7 +286,9 @@ export default function ARScene({ onBack }) {
       setStatus('Starting camera...');
       await mindarThree.start();
       mindarRef.current = mindarThree;
-      if (destroyed) { mindarThree.stop().catch(() => {}); return; }
+      // stop() di mind-ar SYNCHRONOUS, balikin undefined (bukan Promise) —
+      // `.catch()` di sini nge-throw TypeError kalau dipanggil apa adanya.
+      if (destroyed) { try { mindarThree.stop(); } catch { /* ignore */ } return; }
 
       setStatus('Scanning... (arahkan ke cover album)');
       setReady(true);
@@ -357,7 +359,8 @@ export default function ARScene({ onBack }) {
       mindarThree?._animate?.();
       if (mindarThree) {
         mindarThree.renderer?.setAnimationLoop(null);
-        mindarThree.stop().catch(() => {});
+        // Sama: stop() sync, jangan .catch() balikannya.
+        try { mindarThree.stop(); } catch { /* ignore */ }
       }
       overlayRenderer.domElement.removeEventListener('pointerdown', onPointerDown);
       overlayRenderer.domElement.removeEventListener('pointermove', onPointerMove);
