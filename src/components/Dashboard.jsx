@@ -17,8 +17,8 @@ const AR_ITEMS = [
   },
   {
     id: 'preview3d',
-    title: 'Preview 3D (tanpa AR)',
-    desc: 'Sementara: cuma tampilin object 3D, bisa diputar & di-zoom bebas',
+    title: 'Preview 3D',
+    desc: 'Scan cover album dulu, abis itu putar & zoom bebas (bukan overlay kamera)',
     icon: '🧊',
     type: 'preview3d',
   },
