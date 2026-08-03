@@ -96,7 +96,6 @@ export default function ARScene({ onBack }) {
     hologramGroup.visible = false;
     overlayScene.add(hologramGroup);
     hologramRef.current = hologramGroup;
-    window.__debugHologramGroup = hologramGroup;
 
     /* ── Blocking cube — placeholder posisi/skala object ── */
     const BOX_SIZE = 0.6;
@@ -228,6 +227,7 @@ export default function ARScene({ onBack }) {
     /* ── MindAR (camera feed + image detection trigger) ── */
     let mindarThree = null;
     let destroyed   = false;
+    let zIndexObserver = null;
     mindarRef.current = null;
 
     const init = async () => {
@@ -261,12 +261,30 @@ export default function ARScene({ onBack }) {
       setStatus('Scanning... (arahkan ke cover album)');
       setReady(true);
 
-      // Fix z-index: video di bawah, overlay canvas MindAR di tengah
-      const arVideo  = container.querySelector('video[autoplay]');
-      const arCanvas = container.querySelector('canvas[data-engine]') ?? container.querySelector('canvas');
-      if (arVideo)  arVideo.style.zIndex  = '0';
-      if (arCanvas && arCanvas !== overlayRenderer.domElement) arCanvas.style.zIndex = '1';
-      // Overlay renderer kita ada di z-index 10 (sudah diset di atas)
+      // Fix z-index: video di bawah, canvas MindAR di tengah, overlay kita
+      // di atas (z=10, udah diset di atas). BUG lama: querySelector
+      // 'canvas[data-engine]' gak reliable buat beda-in MindAR punya sama
+      // overlay kita sendiri (dua-duanya sama-sama canvas three.js, jadi
+      // dua-duanya kena attribute data-engine itu) — kadang malah nangkep
+      // canvas KITA sendiri, jadi z-index MindAR gak ke-set & bisa nge-
+      // stack DI ATAS overlay kita. Lebih parah lagi: MindAR ternyata bisa
+      // BIKIN ULANG canvas-nya belakangan (misal pas target ke-detect),
+      // jadi fix SEKALI doang abis start() gak cukup — canvas baru yg dia
+      // bikin nanti gak kena style-nya, balik nutupin overlay. Fix yg
+      // robust: MutationObserver yg terus mantengin container, setiap ada
+      // canvas BARU muncul (selain punya kita), langsung di-z-index-in.
+      const fixCanvasZIndex = () => {
+        const arVideo = container.querySelector('video[autoplay]');
+        if (arVideo && arVideo.style.zIndex !== '0') arVideo.style.zIndex = '0';
+        container.querySelectorAll('canvas').forEach((c) => {
+          if (c !== overlayRenderer.domElement && c.style.zIndex !== '1') {
+            c.style.zIndex = '1';
+          }
+        });
+      };
+      fixCanvasZIndex();
+      zIndexObserver = new MutationObserver(fixCanvasZIndex);
+      zIndexObserver.observe(container, { childList: true, subtree: true });
 
       /* ── Floating + Gyro render loop ── */
       let raf;
@@ -307,6 +325,7 @@ export default function ARScene({ onBack }) {
 
     return () => {
       destroyed = true;
+      zIndexObserver?.disconnect();
       mindarThree?._animate?.();
       if (mindarThree) {
         mindarThree.renderer?.setAnimationLoop(null);

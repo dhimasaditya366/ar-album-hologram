@@ -28,6 +28,12 @@ body,
 #root video[autoplay] {
   z-index: 0 !important;
 }
-#root canvas[data-engine] {
-  z-index: 1 !important;
-}
+/* Canvas z-index SENGAJA gak diatur di sini (dulu ada rule
+   "canvas[data-engine] { z-index: 1 !important }" tapi itu match SEMUA
+   canvas three.js, termasuk overlay hologram kita sendiri — three.js nge-
+   stamp data-engine ke canvas manapun yg dia bikin, gak cuma punya MindAR.
+   !important dari rule itu menang ngelawan inline z-index apapun yg coba
+   diset dari JS, jadi ARScene.jsx gak bisa naro overlay-nya di atas canvas
+   AR MindAR. Fix yg bener ada di ARScene.jsx: assign z-index via JS pake
+   IDENTITY CHECK (`canvas !== overlayRenderer.domElement`) yg presisi beda-in
+   dua canvas ini, bukan CSS attribute selector yg gak bisa). */
