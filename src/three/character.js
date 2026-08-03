@@ -96,12 +96,33 @@ export function setupLighting(scene, { debug = false, castShadow = true, intensi
   const hemi = new THREE.HemisphereLight(0xbfd4ff, 0x1a1410, 0.2 * s);
   scene.add(hemi);
 
+  // Soft side fill (kiri & kanan wajah) — diminta krn pipi kadang masih
+  // agak gelap walau key+fill+hemi udah ada; dua-duanya lebih ke arah
+  // depan-diagonal, bukan bener2 dari SAMPING wajah. Pakai PointLight
+  // (bukan DirectionalLight) krn PointLight punya falloff jarak alami
+  // (decay) — mirip softbox fisik yg ditaruh DEKET subjek, hasilnya lembut
+  // & localized, bukan nyorot rata dari "jarak tak-hingga" kayak
+  // directional (kesannya lebih graphic/flat kalau dipake buat side-fill
+  // gini). Posisi Z≈0.05 (nyaris murni samping, dikit aja ke depan) —
+  // SENGAJA bukan di depan wajah (itu tugas key/fill), biar gak "direct
+  // nembak muka", lebih ke wrap pipi dari samping. Intensity rendah +
+  // gak castShadow biar soft, gak nambah kontras/shadow baru.
+  const sideLeft = new THREE.PointLight(0xfff2e0, 0.32 * s, 4, 2);
+  sideLeft.position.set(-1.4, 0.3, 0.05);
+  scene.add(sideLeft);
+
+  const sideRight = new THREE.PointLight(0xfff2e0, 0.32 * s, 4, 2);
+  sideRight.position.set(1.4, 0.3, 0.05);
+  scene.add(sideRight);
+
   if (debug) {
     const keyHelper = new THREE.DirectionalLightHelper(key, 0.3, 0xff5555);
     const fillHelper = new THREE.DirectionalLightHelper(fill, 0.3, 0x55aaff);
     const rimHelper = new THREE.DirectionalLightHelper(rim, 0.3, 0x55ff88);
-    scene.add(keyHelper, fillHelper, rimHelper);
-    helpers.push(keyHelper, fillHelper, rimHelper);
+    const sideLeftHelper = new THREE.PointLightHelper(sideLeft, 0.1, 0xffcc88);
+    const sideRightHelper = new THREE.PointLightHelper(sideRight, 0.1, 0xffcc88);
+    scene.add(keyHelper, fillHelper, rimHelper, sideLeftHelper, sideRightHelper);
+    helpers.push(keyHelper, fillHelper, rimHelper, sideLeftHelper, sideRightHelper);
     if (castShadow) {
       const shadowHelper = new THREE.CameraHelper(key.shadow.camera);
       scene.add(shadowHelper);
@@ -109,7 +130,7 @@ export function setupLighting(scene, { debug = false, castShadow = true, intensi
     }
   }
 
-  return { key, fill, rim, hemi, helpers };
+  return { key, fill, rim, hemi, sideLeft, sideRight, helpers };
 }
 
 /* ────────────────────────────────────────────────────────────────────── */
