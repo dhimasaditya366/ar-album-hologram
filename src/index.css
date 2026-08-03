@@ -1,0 +1,33 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+}
+
+/* Scan line animation */
+@keyframes scanline {
+  0%   { top: 0%; opacity: 1; }
+  95%  { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+/* Force MindAR camera video visible (MindAR sets z-index:-2 by default) */
+#root video[autoplay] {
+  z-index: 0 !important;
+}
+#root canvas[data-engine] {
+  z-index: 1 !important;
+}

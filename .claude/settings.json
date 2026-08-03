@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh repo create *)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "timeout": 180,
+            "async": true,
+            "statusMessage": "Auto-deploying changes...",
+            "command": "$dir = 'D:\\kerjaan\\MetaPacmas\\4. Web AR Cover Album\\ar-album-hologram'; Set-Location $dir; $changes = git status --porcelain; if ($changes) { git add -A; git commit -m \"auto: deploy $(Get-Date -Format 'HH:mm')\"; git push; & 'D:\\program files\\Node\\node.exe' './node_modules/vite/bin/vite.js' build; & 'D:\\program files\\Node\\node.exe' './node_modules/gh-pages/bin/gh-pages.js' -d dist }"
+          }
+        ]
+      }
+    ]
+  }
+}
