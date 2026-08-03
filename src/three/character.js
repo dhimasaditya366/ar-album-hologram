@@ -504,11 +504,13 @@ export function setupGround(scene, y, { scale = 1 } = {}) {
   // vertex mesh shirt (LOD0005): titik jagged terdalam pas di y (parameter
   // fungsi ini), titik-titik gerigi lain naik sampe ~0.17 unit world lebih
   // tinggi dari situ. Ganti ke CylinderGeometry (bukan disc) yg tebalnya
-  // 0.28 (0.17 + margin ~65%) — permukaan atasnya nutupin abis seluruh
-  // zona gerigi (karakter jadi keliatan "muncul" dari platform solid, gak
-  // ada gap jagged yg nembus dari sudut manapun), sisi silinder-nya jadi
-  // "dinding" solid yg nutupin celah dari sudut nyerong/deket juga.
-  const hemBandHeight = 0.28 * scale;
+  // nutupin seluruh zona gerigi itu (karakter keliatan "muncul" dari
+  // platform solid, gak ada gap jagged yg nembus dari sudut manapun), sisi
+  // silinder-nya jadi "dinding" solid yg nutupin celah dari sudut
+  // nyerong/deket juga. Sempat 0.28 (margin ~65% di atas 0.17) tapi
+  // keliatan ketebelan secara visual — diturunin ke 0.19 (margin ~12%),
+  // masih nutupin penuh zona jagged-nya, cuma marginnya lebih tipis.
+  const hemBandHeight = 0.19 * scale;
   const radius = 0.85 * scale;
   const geometry = new THREE.CylinderGeometry(radius, radius, hemBandHeight, 64, 1, false);
 

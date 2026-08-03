@@ -105,9 +105,15 @@ export default function ARScene({ onBack }) {
        kayak percobaan lama (1.7) yg bikin overexposed. ── */
     setupLighting(overlayScene, { castShadow: true, intensityScale: 1.2 });
 
-    /* ── Hologram group (wrapper untuk gyro + float) ── */
+    /* ── Hologram group (wrapper untuk gyro + drag rotate) ── */
     const hologramGroup = new THREE.Group();
     hologramGroup.visible = false;
+    // Turun dikit (Y-) biar gak terlalu tinggi di frame, maju dikit ke
+    // kamera (Z+, kamera ada di Z=2.0 ngadep ke origin) biar karakter+stage
+    // keliatan lebih besar tanpa perlu geser kamera-nya sendiri (yg udah
+    // dituning ketat biar gak nembus platform, lihat komentar overlayCamera
+    // di atas).
+    hologramGroup.position.set(0, -0.1, 0.25);
     overlayScene.add(hologramGroup);
     hologramRef.current = hologramGroup;
 
@@ -312,12 +318,10 @@ export default function ARScene({ onBack }) {
 
       /* ── Floating + Gyro render loop ── */
       let raf;
-      const startTime = performance.now();
-      let lastTime = startTime;
+      let lastTime = performance.now();
       const animate = () => {
         raf = requestAnimationFrame(animate);
         const now = performance.now();
-        const t = (now - startTime) / 1000;
         const delta = (now - lastTime) / 1000;
         lastTime = now;
 
@@ -329,9 +333,9 @@ export default function ARScene({ onBack }) {
         hologramGroup.rotation.x = curX;
         // Drag jadi rotasi dasar, gyro nambahin goyangan tipis di atasnya.
         hologramGroup.rotation.y = dragRotationY + curY;
-
-        // Float animation
-        hologramGroup.position.y = Math.sin(t * 1.2) * 0.06;
+        // Efek floating (naik-turun sinusoidal) dihapus per request — posisi
+        // Y sekarang statis, cuma di-set sekali pas inisialisasi (lihat
+        // hologramGroup.position.set di atas).
 
         overlayRenderer.render(overlayScene, overlayCamera);
       };
