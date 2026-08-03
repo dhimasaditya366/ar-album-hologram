@@ -1,0 +1,11 @@
+# Binary assets — prevent Git from doing CRLF/LF conversion (would corrupt binary files)
+*.glb    binary
+*.fbx    binary
+*.mind   binary
+*.mp4    binary
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.webp   binary
+*.hdr    binary
+*.exr    binary

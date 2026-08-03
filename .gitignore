@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+
+# Raw source asset (221MB) — melebihi limit file GitHub (100MB). Gak
+# dipakai runtime (app pakai mh_dimas_optimized.glb), cuma referensi
+# development lokal.
+source-assets/mh_dimas_raw_metahuman.glb
