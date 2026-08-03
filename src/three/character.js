@@ -20,8 +20,18 @@ export const DRACO_DECODER_PATH = import.meta.env.BASE_URL + 'assets/draco/gltf/
 /* ────────────────────────────────────────────────────────────────────── */
 /* Lighting — three-point (key/fill/rim) + hemisphere fill                 */
 /* ────────────────────────────────────────────────────────────────────── */
-export function setupLighting(scene, { debug = false, castShadow = true } = {}) {
+export function setupLighting(scene, { debug = false, castShadow = true, intensityScale = 1 } = {}) {
   const helpers = [];
+
+  // intensityScale: dipakai AR (lihat ARScene.jsx) buat naikin brightness
+  // di atas nilai default. Preview3D adalah studio backdrop gelap terkontrol
+  // — nilai default (1.05/0.33/0.6/0.2) udah pas di situ. AR nimpa live
+  // camera feed yg exposure/white-balance-nya di-handle OTOMATIS sama
+  // kamera HP & bisa jauh lebih terang dari studio backdrop kita (ruangan
+  // indoor biasa dll) — light rig FIXED yg sama persis jadi keliatan gelap
+  // dibanding real-world di sekitarnya. Preview3D tetep manggil tanpa param
+  // ini (default 1, gak berubah).
+  const s = intensityScale;
 
   // Key — sumber cahaya utama, diagonal atas-depan, satu-satunya yg cast
   // shadow (fill/rim gak usah, biar shadow gak dobel/berantakan).
@@ -29,7 +39,7 @@ export function setupLighting(scene, { debug = false, castShadow = true } = {}) 
   // lagi tanpa angka pasti ("something in between") — 1.05 dipilih sbg
   // titik tengah antara 0.95 (udah kebukti aman) dan 1.2 (udah kebukti
   // ketinggian).
-  const key = new THREE.DirectionalLight(0xffffff, 1.05);
+  const key = new THREE.DirectionalLight(0xffffff, 1.05 * s);
   key.position.set(1.1, 1.7, 1.4);
   key.target.position.set(0, 0.1, 0);
   // castShadow bisa dimatiin (AR) — gak ada ground/floor buat nangkep
@@ -60,7 +70,7 @@ export function setupLighting(scene, { debug = false, castShadow = true } = {}) 
   // dari sebelumnya agak di belakang (Z=-0.5) — biar bener2 "ngangkat"
   // rahang kiri yg jadi sisi berlawanan dari key light, bukan cuma ngisi
   // ambient belakang yg gak kena rahang.
-  const fill = new THREE.DirectionalLight(0xdce6ff, 0.33);
+  const fill = new THREE.DirectionalLight(0xdce6ff, 0.33 * s);
   fill.position.set(-1.3, 0.85, 0.9);
   fill.target.position.set(0, 0.1, 0);
   scene.add(fill, fill.target);
@@ -73,7 +83,7 @@ export function setupLighting(scene, { debug = false, castShadow = true } = {}) 
   // pasti — 0.6 dipilih sbg titik tengah, dan karena rambut sekarang matte
   // (roughness tinggi, clearcoat/sheen 0 di setupHairMaterial) rim setinggi
   // ini gak bakal balik jadi "shiny", cuma nge-highlight siluet aja.
-  const rim = new THREE.DirectionalLight(0xfff4e0, 0.6);
+  const rim = new THREE.DirectionalLight(0xfff4e0, 0.6 * s);
   rim.position.set(-0.3, 1.8, -1.9);
   rim.target.position.set(0, 0.2, 0);
   scene.add(rim, rim.target);
@@ -81,7 +91,7 @@ export function setupLighting(scene, { debug = false, castShadow = true } = {}) 
   // Hemisphere lembut — ambient yg lebih natural dari AmbientLight polos
   // (langit kebiruan dari atas, pantulan lantai kecoklatan dari bawah).
   // Diturunin dikit biar gak nambah overall brightness dobel sama PMREM env.
-  const hemi = new THREE.HemisphereLight(0xbfd4ff, 0x1a1410, 0.2);
+  const hemi = new THREE.HemisphereLight(0xbfd4ff, 0x1a1410, 0.2 * s);
   scene.add(hemi);
 
   if (debug) {

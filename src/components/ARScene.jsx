@@ -60,11 +60,20 @@ export default function ARScene({ onBack }) {
     // gelap/kusam di AR walau lighting rig-nya (setupLighting) udah sama
     // persis. Samain settingnya biar hasilnya konsisten di kedua tempat.
     overlayRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-    overlayRenderer.toneMappingExposure = 1.0;
+    // 1.0 (nyamain sama Preview3D) masih keliatan gelap begitu dites di HP
+    // beneran — beda konteks: Preview3D punya backdrop studio gelap
+    // terkontrol, AR nimpa live camera feed yg exposure-nya di-auto sama
+    // kamera HP & seringkali lebih terang dari itu (ruangan indoor biasa
+    // dll), jadi karakter kalah terang dibanding sekitarnya. Dinaikin ke
+    // 1.5 (exposure) + intensityScale 1.7 di setupLighting bawah — dua-duanya
+    // dipakai bareng krn ngefek beda: exposure ngangkat overall brightness
+    // hasil akhir, intensityScale ngangkat kontribusi tiap light individual
+    // (jaga rasio key/fill/rim/hemi tetep sama, gak cuma nge-flatten scene).
+    overlayRenderer.toneMappingExposure = 1.5;
     overlayRenderer.outputEncoding = THREE.sRGBEncoding;
 
     overlayRenderer.domElement.style.cssText =
-      'position:absolute;top:0;left:0;width:100%;height:100%;z-index:10;pointer-events:none';
+      'position:absolute;top:0;left:0;width:100%;height:100%;z-index:10;touch-action:none';
     container.appendChild(overlayRenderer.domElement);
 
     const overlayScene  = new THREE.Scene();
@@ -80,13 +89,14 @@ export default function ARScene({ onBack }) {
        bedanya castShadow:false, soalnya gak ada ground/floor buat nangkep
        shadow di AR overlay, shadow map cuma nambah beban render sia-sia di
        HP yg udah sibuk ngolah camera feed + image tracking. ── */
-    setupLighting(overlayScene, { castShadow: false });
+    setupLighting(overlayScene, { castShadow: false, intensityScale: 1.7 });
 
     /* ── Hologram group (wrapper untuk gyro + float) ── */
     const hologramGroup = new THREE.Group();
     hologramGroup.visible = false;
     overlayScene.add(hologramGroup);
     hologramRef.current = hologramGroup;
+    window.__debugHologramGroup = hologramGroup;
 
     /* ── Blocking cube — placeholder posisi/skala object ── */
     const BOX_SIZE = 0.6;
@@ -152,6 +162,39 @@ export default function ARScene({ onBack }) {
       .catch((err) => {
         console.error('Gagal load karakter AR, fallback ke blocking cube:', err);
       });
+
+    /* ── Drag buat rotate manual 360° (horizontal aja, sesuai request) ──
+       Terpisah dari gyro: gyro (di bawah) ngasih tilt halus & otomatis
+       ngikutin device orientation, drag ngasih kontrol PENUH ke user buat
+       muter hologram-nya bebas ke arah mana aja. Dua-duanya digabung pas
+       diterapin ke hologramGroup.rotation.y (lihat animate loop) — gak
+       saling override, drag jadi rotasi "dasar", gyro nambahin goyangan
+       tipis di atasnya. Gak ada clamp/limit sama sekali, jadi muter terus
+       ke satu arah otomatis nembus 360° berkali-kali (Three.js rotation.y
+       emang gak butuh di-modulo, radian berapapun otomatis wrap visual).
+    */
+    let isDragging = false;
+    let lastPointerX = 0;
+    let dragRotationY = 0;
+    const DRAG_SENSITIVITY = 0.008; // radian per pixel drag horizontal
+
+    const onPointerDown = (e) => {
+      isDragging = true;
+      lastPointerX = e.clientX;
+      overlayRenderer.domElement.setPointerCapture?.(e.pointerId);
+    };
+    const onPointerMove = (e) => {
+      if (!isDragging) return;
+      const deltaX = e.clientX - lastPointerX;
+      lastPointerX = e.clientX;
+      dragRotationY += deltaX * DRAG_SENSITIVITY;
+    };
+    const onPointerUp = () => { isDragging = false; };
+
+    overlayRenderer.domElement.addEventListener('pointerdown', onPointerDown);
+    overlayRenderer.domElement.addEventListener('pointermove', onPointerMove);
+    overlayRenderer.domElement.addEventListener('pointerup', onPointerUp);
+    overlayRenderer.domElement.addEventListener('pointercancel', onPointerUp);
 
     /* ── Gyroscope ── */
     let gyroX = 0, gyroY = 0;   // target rotation (rad)
@@ -242,7 +285,8 @@ export default function ARScene({ onBack }) {
         curX += (gyroX - curX) * 0.08;
         curY += (gyroY - curY) * 0.08;
         hologramGroup.rotation.x = curX;
-        hologramGroup.rotation.y = curY;
+        // Drag jadi rotasi dasar, gyro nambahin goyangan tipis di atasnya.
+        hologramGroup.rotation.y = dragRotationY + curY;
 
         // Float animation
         hologramGroup.position.y = Math.sin(t * 1.2) * 0.06;
@@ -268,6 +312,10 @@ export default function ARScene({ onBack }) {
         mindarThree.renderer?.setAnimationLoop(null);
         mindarThree.stop().catch(() => {});
       }
+      overlayRenderer.domElement.removeEventListener('pointerdown', onPointerDown);
+      overlayRenderer.domElement.removeEventListener('pointermove', onPointerMove);
+      overlayRenderer.domElement.removeEventListener('pointerup', onPointerUp);
+      overlayRenderer.domElement.removeEventListener('pointercancel', onPointerUp);
       overlayRenderer.dispose();
       overlayRenderer.domElement.remove();
       window.removeEventListener('deviceorientation', onOrientation);
