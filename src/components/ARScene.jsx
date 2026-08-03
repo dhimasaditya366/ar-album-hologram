@@ -64,12 +64,18 @@ export default function ARScene({ onBack }) {
     // ke setupRenderer() Preview3D.
     overlayRenderer.shadowMap.enabled = true;
     overlayRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    // Sempat dinaikin ke exposure 1.5 + intensityScale 1.7 krn dites di HP
-    // keliatan gelap — tapi user minta lighting/komposisi PERSIS sama kayak
-    // Preview3D, jadi dibalikin exact match: ACES + exposure 1.0 + sRGB,
-    // sama kayak setupRenderer() punya Preview3D.
+    // Exact-match ke Preview3D (exposure 1.0, intensityScale default) sempat
+    // dicoba, tapi user tes lagi di HP & masih keliatan gelap. Root cause-nya
+    // BUKAN exposure — Preview3D dapet cahaya ambient tambahan dari PMREM
+    // envMap (RoomEnvironment, lihat setupEnvironment() di Preview3D.jsx)
+    // yg AR sengaja skip (gak ada HDRI relevan + hemat render cost). Tanpa
+    // env light itu, AR-nya emang lebih gelap dari Preview3D walau light
+    // rig-nya identik. Exposure 1.15 (naik dikit dari 1.0) buat kompensasi
+    // itu — ACES tone mapping ngerolloff highlight-nya (bukan clip keras),
+    // jadi angka segini masih aman dari overexposure (beda kasus sama
+    // percobaan lama 1.5 yg kegedean).
     overlayRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-    overlayRenderer.toneMappingExposure = 1.0;
+    overlayRenderer.toneMappingExposure = 1.15;
     overlayRenderer.outputEncoding = THREE.sRGBEncoding;
 
     overlayRenderer.domElement.style.cssText =
@@ -91,13 +97,13 @@ export default function ARScene({ onBack }) {
     overlayCamera.position.set(0, 0.25, 2.0);
     overlayCamera.lookAt(0, -0.15, 0);
 
-    /* ── Lighting: PERSIS kayak Preview3D (key/fill/rim/hemi, sama
-       intensity/posisi) — sekarang castShadow:true juga (dulu false, krn
-       AR gak ada ground buat nangkep shadow; sekarang ground/platform-nya
-       udah ditambahin di bawah bareng karakter, jadi shadow perlu nyala
-       biar platform nangkep contact shadow karakter-nya, gak keliatan
-       ngambang gak nyambung). ── */
-    setupLighting(overlayScene, { castShadow: true });
+    /* ── Lighting: sama posisi/warna kayak Preview3D (key/fill/rim/hemi) —
+       castShadow:true (ground/platform-nya nangkep contact shadow karakter,
+       gak keliatan ngambang). intensityScale 1.2 buat kompensasi ambient
+       PMREM envMap yg Preview3D punya tapi AR-nya skip (lihat komentar
+       toneMappingExposure di atas) — cuma naik dikit, bukan flat-in semua
+       kayak percobaan lama (1.7) yg bikin overexposed. ── */
+    setupLighting(overlayScene, { castShadow: true, intensityScale: 1.2 });
 
     /* ── Hologram group (wrapper untuk gyro + float) ── */
     const hologramGroup = new THREE.Group();
