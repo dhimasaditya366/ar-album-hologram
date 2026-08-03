@@ -20,7 +20,14 @@ import {
   setupLighting,
   loadCharacter,
   fitAndPrepareModel,
+  setupGround,
 } from '../three/character.js';
+
+// targetSize karakter di AR — dipisah jadi konstanta krn dipake di 2 tempat
+// (fitAndPrepareModel & setupGround, biar platform-nya proporsional sama
+// karakter). Preview3D pakai 1.6, jadi rasio platform/karakter dari sini
+// (AR_CHARACTER_SIZE / 1.6) dipake buat scale setupGround juga.
+const AR_CHARACTER_SIZE = 0.85;
 
 export default function ARScene({ onBack }) {
   const containerRef = useRef(null);
@@ -52,24 +59,17 @@ export default function ARScene({ onBack }) {
     overlayRenderer.setSize(W, H);
     overlayRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     overlayRenderer.setClearColor(0x000000, 0);
-    // Material fixes (skin sheen, hair matte-roughness, dll — dari
-    // character.js) di-tune sambil ngeliat hasil di Preview3D, yg
-    // renderer-nya pakai ACES tone mapping + exposure 1.0 + sRGB encoding.
-    // Renderer AR ini gak pernah diset sama sekali (defaultnya
-    // NoToneMapping + linear) — itu penyebab utama karakter keliatan
-    // gelap/kusam di AR walau lighting rig-nya (setupLighting) udah sama
-    // persis. Samain settingnya biar hasilnya konsisten di kedua tempat.
+    // Shadow map baru perlu nyala sekarang krn ground/platform-nya ada
+    // (castShadow di setupLighting juga dinyalain, lihat di bawah) — samain
+    // ke setupRenderer() Preview3D.
+    overlayRenderer.shadowMap.enabled = true;
+    overlayRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Sempat dinaikin ke exposure 1.5 + intensityScale 1.7 krn dites di HP
+    // keliatan gelap — tapi user minta lighting/komposisi PERSIS sama kayak
+    // Preview3D, jadi dibalikin exact match: ACES + exposure 1.0 + sRGB,
+    // sama kayak setupRenderer() punya Preview3D.
     overlayRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-    // 1.0 (nyamain sama Preview3D) masih keliatan gelap begitu dites di HP
-    // beneran — beda konteks: Preview3D punya backdrop studio gelap
-    // terkontrol, AR nimpa live camera feed yg exposure-nya di-auto sama
-    // kamera HP & seringkali lebih terang dari itu (ruangan indoor biasa
-    // dll), jadi karakter kalah terang dibanding sekitarnya. Dinaikin ke
-    // 1.5 (exposure) + intensityScale 1.7 di setupLighting bawah — dua-duanya
-    // dipakai bareng krn ngefek beda: exposure ngangkat overall brightness
-    // hasil akhir, intensityScale ngangkat kontribusi tiap light individual
-    // (jaga rasio key/fill/rim/hemi tetep sama, gak cuma nge-flatten scene).
-    overlayRenderer.toneMappingExposure = 1.5;
+    overlayRenderer.toneMappingExposure = 1.0;
     overlayRenderer.outputEncoding = THREE.sRGBEncoding;
 
     overlayRenderer.domElement.style.cssText =
@@ -78,18 +78,26 @@ export default function ARScene({ onBack }) {
 
     const overlayScene  = new THREE.Scene();
     const overlayCamera = new THREE.PerspectiveCamera(60, W / H, 0.01, 100);
-    // Jarak digeser lebih deket (2.5 → 1.7) bareng targetSize karakter yg
-    // dinaikin (lihat fitAndPrepareModel di bawah) — dulu karakter keliatan
-    // kekecilan/jauh di tengah frame, sekarang lebih dominan & "di depan
-    // kamera" beneran, bukan cuma titik kecil.
-    overlayCamera.position.set(0, 0, 1.7);
+    // Jarak digeser lebih deket (2.5 → 1.7) — tapi 1.3 (percobaan pertama)
+    // ternyata KETERUSAN deket begitu platform-nya ditambahin: platform
+    // nambah tinggi total yg perlu muat di frame (karakter + platform di
+    // bawahnya), jadi di 1.3 kameranya malah "nembus" ke dalem platform,
+    // cuma keliatan dagu doang. 2.0 dipilih — masih lebih deket dari
+    // default awal (2.5), tapi cukup jauh buat karakter+platform muat
+    // bareng di frame. Dinaikin dikit + lookAt sedikit ke bawah (mirip
+    // Preview3D yg kameranya di atas eye-level, agak nunduk) — camera
+    // lurus tanpa tilt ternyata malah nunjukin sisi BAWAH platform yg
+    // ke-render dari sudut ganjil, bukan permukaan atasnya.
+    overlayCamera.position.set(0, 0.25, 2.0);
+    overlayCamera.lookAt(0, -0.15, 0);
 
-    /* ── Lighting: pakai rig studio yg sama kayak Preview3D (key/fill/rim/
-       hemi) biar konsisten look-nya sama karakter yg dipakai bareng —
-       bedanya castShadow:false, soalnya gak ada ground/floor buat nangkep
-       shadow di AR overlay, shadow map cuma nambah beban render sia-sia di
-       HP yg udah sibuk ngolah camera feed + image tracking. ── */
-    setupLighting(overlayScene, { castShadow: false, intensityScale: 1.7 });
+    /* ── Lighting: PERSIS kayak Preview3D (key/fill/rim/hemi, sama
+       intensity/posisi) — sekarang castShadow:true juga (dulu false, krn
+       AR gak ada ground buat nangkep shadow; sekarang ground/platform-nya
+       udah ditambahin di bawah bareng karakter, jadi shadow perlu nyala
+       biar platform nangkep contact shadow karakter-nya, gak keliatan
+       ngambang gak nyambung). ── */
+    setupLighting(overlayScene, { castShadow: true });
 
     /* ── Hologram group (wrapper untuk gyro + float) ── */
     const hologramGroup = new THREE.Group();
@@ -122,18 +130,20 @@ export default function ARScene({ onBack }) {
     /* ── Karakter asli (MetaHuman) — load paralel sama init MindAR di
        bawah, gantiin blocking cube begitu selesai. Reuse loader + material
        fixes (skin sheen/roughness noise, hair matte/alpha/scalp-darkening)
-       yg sama persis kayak Preview3D lewat modul character.js — TAPI gak
-       ada scene.background/fog/ground/vignette CSS kayak Preview3D, karena
-       di AR yg jadi "background" itu live camera feed asli, bukan studio
-       backdrop; environment reflection (PMREM) juga di-skip — gak ada HDRI
-       yg relevan buat direfleksiin di sini & nambah beban render/loading
-       yg gak sepadan buat overlay AR ringan. Kalau load gagal (network/
-       parsing error), boxFill/boxEdges TETEP keliatan sbg fallback biar AR
-       gak nampilin kekosongan. */
+       + platform hologram (setupGround) yg sama persis kayak Preview3D
+       lewat modul character.js. Yg TETEP beda dari Preview3D: gak ada
+       scene.background/fog/CSS vignette, karena di AR yg jadi "background"
+       itu live camera feed asli, bukan studio backdrop — nge-fog/vignette-in
+       kamera asli gak masuk akal; environment reflection (PMREM) juga
+       di-skip — gak ada HDRI yg relevan buat direfleksiin di sini & nambah
+       beban render/loading yg gak sepadan buat overlay AR ringan. Kalau
+       load gagal (network/parsing error), boxFill/boxEdges TETEP keliatan
+       sbg fallback biar AR gak nampilin kekosongan. */
     let characterModel = null;
     let mixer = null;
     let dracoLoaderRef = null;
     let modelCancelled = false;
+    let ground = null;
 
     loadCharacter(MODEL_URL, DRACO_DECODER_PATH, {})
       .then(({ gltf, dracoLoader }) => {
@@ -148,10 +158,18 @@ export default function ARScene({ onBack }) {
         // lebih kecil secara visual drpd cube-nya. Naikin ke 0.85 (bareng
         // kamera yg digeser lebih deket di atas) biar karakter dominan di
         // frame, gak cuma titik kecil.
-        fitAndPrepareModel(characterModel, 0.85);
+        const { minY } = fitAndPrepareModel(characterModel, AR_CHARACTER_SIZE);
         hologramGroup.add(characterModel);
         boxFill.visible = false;
         boxEdges.visible = false;
+
+        // Platform hologram — "1 paket" sama karakter, jadi ditaruh sbg
+        // child hologramGroup (bukan overlayScene langsung) biar ikut
+        // rotasi (drag/gyro) & floating bareng karakternya, bukan diem di
+        // tempat sementara karakter di atasnya muter sendiri. scale
+        // proporsional ke targetSize AR (0.85) relatif targetSize Preview3D
+        // (1.6) biar rasio platform-ke-karakter sama persis kayak di sana.
+        ground = setupGround(hologramGroup, minY, { scale: AR_CHARACTER_SIZE / 1.6 });
 
         if (gltf.animations?.length) {
           mixer = new THREE.AnimationMixer(characterModel);
@@ -343,6 +361,13 @@ export default function ARScene({ onBack }) {
       boxFill.material.dispose();
       boxEdges.geometry.dispose();
       boxEdges.material.dispose();
+      if (ground) {
+        ground.geometry.dispose();
+        (Array.isArray(ground.material) ? ground.material : [ground.material]).forEach((m) => {
+          m?.map?.dispose();
+          m?.dispose();
+        });
+      }
       modelCancelled = true;
       mixer?.stopAllAction();
       dracoLoaderRef?.dispose();

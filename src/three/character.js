@@ -2,12 +2,14 @@
  * character.js
  *
  * Setup bareng buat render karakter MetaHuman (lighting + material fixes +
- * loader) — dipakai bareng sama Preview3D.jsx (non-AR, full studio setup)
- * dan ARScene.jsx (AR, background/fog/ground-nya beda karena nimpa live
- * camera feed). Diekstrak dari Preview3D.jsx biar dua tempat itu gak perlu
- * duplikat & drift logic-nya — SEMUA fungsi di sini murni "bagaimana
- * karakter dirender", gak megang scene composition (background/fog/ground)
- * yg emang beda kebutuhan antara preview studio vs AR overlay.
+ * stage/ground + loader) — dipakai bareng sama Preview3D.jsx (non-AR, full
+ * studio setup) dan ARScene.jsx (AR, nimpa live camera feed). Diekstrak dari
+ * Preview3D.jsx biar dua tempat itu gak perlu duplikat & drift logic-nya.
+ *
+ * Yang TETEP beda antara Preview3D & AR (sengaja gak di sini): scene
+ * .background (Preview3D studio backdrop vs AR camera feed asli), fog, sama
+ * CSS vignette — ketiganya emang cuma masuk akal buat backdrop studio yg
+ * terkontrol, gak relevan buat overlay yg nimpa dunia nyata.
  */
 
 import * as THREE from 'three';
@@ -417,4 +419,103 @@ export function fitAndPrepareModel(model, targetSize = 1.6) {
 
   const minY = box.min.y * scale + model.position.y;
   return { minY };
+}
+
+/* ────────────────────────────────────────────────────────────────────── */
+/* Stage/ground — platform hologram (dipake di Preview3D & AR)             */
+/* ────────────────────────────────────────────────────────────────────── */
+// Cincin cyan tipis (warna aksen yg sama dipake di seluruh UI app ini —
+// status text, border tombol Dashboard/AR: 0x00e5ff) buat kesan "hologram
+// display pad", bukan sekadar lantai abu-abu polos. Base-nya gelap & nyatu
+// ke warna background studio biar gak keliatan kayak piring kotak-terpisah.
+function createStageTexture() {
+  const size = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const cx = size / 2, cy = size / 2;
+
+  const grad = ctx.createRadialGradient(cx, cy, size * 0.02, cx, cy, size * 0.5);
+  grad.addColorStop(0, '#1c2438');
+  grad.addColorStop(0.5, '#0e1422');
+  grad.addColorStop(1, '#05070b'); // nyatu ke warna terluar background studio
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+
+  // Ring glow, ~78% radius disc — dilapis 2x (blur lebar redup + garis
+  // tajam tipis di atasnya) biar kesan "glow" bukan garis keras.
+  const ringR = size * 0.39;
+  ctx.strokeStyle = 'rgba(0,229,255,0.35)';
+  ctx.lineWidth = size * 0.035;
+  ctx.shadowColor = 'rgba(0,229,255,0.9)';
+  ctx.shadowBlur = size * 0.025;
+  ctx.beginPath();
+  ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(140,240,255,0.55)';
+  ctx.lineWidth = size * 0.006;
+  ctx.beginPath();
+  ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+  ctx.stroke();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.encoding = THREE.sRGBEncoding;
+  return texture;
+}
+
+// scale: dipakai buat jaga proporsi radius/tebal platform relatif ke ukuran
+// karakter — Preview3D normalize karakter ke targetSize 1.6 & platform-nya
+// dikalibrasi buat itu (radius 0.85, tebal 0.28), jadi default scale=1
+// nyamain itu persis. AR normalize karakter ke targetSize LEBIH KECIL, jadi
+// manggil dgn scale = (targetSize AR / 1.6) biar rasio platform-ke-karakter
+// tetep sama gak kegedean/kekecilan.
+export function setupGround(scene, y, { scale = 1 } = {}) {
+  // Radius kecil (0.85) — dulu sempat 1.6 (lebih gede dari tinggi karakter
+  // sendiri yg 1.6 unit!), tepi terdekatnya ke kamera keliatan "naik"
+  // ngelewatin batas perspektif & nutupin torso karakter kayak ketutup
+  // rata air.
+  //
+  // Disc DATAR (CircleGeometry) gak cukup buat nutupin hem baju yg jagged —
+  // dari sudut nyerong/deket, celah di antara "gerigi" hem masih nembus
+  // keliatan lewat tepi disc yg cuma setipis kertas. Diukur langsung dari
+  // vertex mesh shirt (LOD0005): titik jagged terdalam pas di y (parameter
+  // fungsi ini), titik-titik gerigi lain naik sampe ~0.17 unit world lebih
+  // tinggi dari situ. Ganti ke CylinderGeometry (bukan disc) yg tebalnya
+  // 0.28 (0.17 + margin ~65%) — permukaan atasnya nutupin abis seluruh
+  // zona gerigi (karakter jadi keliatan "muncul" dari platform solid, gak
+  // ada gap jagged yg nembus dari sudut manapun), sisi silinder-nya jadi
+  // "dinding" solid yg nutupin celah dari sudut nyerong/deket juga.
+  const hemBandHeight = 0.28 * scale;
+  const radius = 0.85 * scale;
+  const geometry = new THREE.CylinderGeometry(radius, radius, hemBandHeight, 64, 1, false);
+
+  const topMaterial = new THREE.MeshStandardMaterial({
+    map: createStageTexture(),
+    roughness: 0.6,
+    metalness: 0,
+    envMapIntensity: 0.2,
+  });
+  // Sisi & bawah silinder gak butuh texture stage (gak akan keliatan dari
+  // sudut normal) — warna gelap polos senada tepi texture stage/background,
+  // sekadar "dinding" penutup, bukan elemen visual yg perlu didesain.
+  const sideMaterial = new THREE.MeshStandardMaterial({
+    color: 0x0b0f18,
+    roughness: 0.7,
+    metalness: 0,
+    envMapIntensity: 0.15,
+  });
+
+  // CylinderGeometry generate 3 material group: [0]=sisi, [1]=tutup atas,
+  // [2]=tutup bawah — urutan array material HARUS ngikutin ini.
+  const floor = new THREE.Mesh(geometry, [sideMaterial, topMaterial, sideMaterial]);
+  // Posisi: bagian BAWAH silinder ditaruh sedikit di bawah titik jagged
+  // terdalam (margin kecil), jadi permukaan ATAS otomatis naik nutupin
+  // seluruh tinggi hemBandHeight di atasnya.
+  const bottomMargin = 0.02 * scale;
+  floor.position.y = (y - bottomMargin) + hemBandHeight / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+  return floor;
 }
