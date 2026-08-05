@@ -211,6 +211,18 @@ export function setupMaterials(mesh) {
     // hair yg areanya luas jadi belang keliatan kalau depthWrite:false).
     const isEyelash = /eyelash/i.test(texName) || /eyelash/i.test(mesh.name);
     if (isEyelash) {
+      // "Black wedge" di ujung mata deket hidung — udah diinvestigasi:
+      // (1) verified sumbernya eyelash mesh (disembunyiin sementara →
+      // wedge ilang), (2) BUKAN soal alphaTest kayak dugaan awal — dites
+      // 0.1/0.3/0.6/0.9 SEMUA hasilnya identik, gak ngecil/ilang sama
+      // sekali, (3) cek langsung texture opacity-nya (atlas strand tipis2,
+      // gak ada blok solid) — nunjukin card geometry di corner ini MAPPING
+      // ke area atlas yg emang SOLID/opaque, bukan area strand tipis yg
+      // marginal. Kesimpulan: ini bukan bug rendering, ini elemen desain
+      // (lash-root convergence) yg dibakar solid di source asset-nya —
+      // gak bisa dibenerin lewat alphaTest tuning. Dibalikin ke 0.1
+      // (nilai lama, aman) krn naikin alphaTest gak ngefek ke wedge-nya
+      // tapi resiko motong lash tipis yg legitimate di tempat lain.
       if (m.transparent) {
         m.depthWrite = true;
         m.alphaTest = 0.1;
@@ -238,36 +250,24 @@ export function setupMaterials(mesh) {
       // Bug lain (BEDA dari z-fighting): UV itu attribute TETAP nempel di
       // vertex tertentu, gak "ngikut" pas bola mata rotasi (gaze,
       // bone-driven) — yg gerak itu permukaan/vertex MANA yg lagi ngadep
-      // kamera. Texture iris/sclera cuma dilukis di satu "kap depan" bola
-      // mata; vertex2 di sisi/belakangnya (normalnya ketutup kelopak, gak
-      // pernah keliatan) UV-nya nunjuk ke area backing/padding GELAP di
-      // atlas yg sama. Begitu gaze rotasi, vertex "kap depan" yg dilukis
-      // itu geser MENJAUH dari kamera, & vertex LAIN (UV-nya nunjuk ke
-      // padding gelap) yg gantiin ngadep kamera — itu penyebab "hitam di
-      // sisi2" & "hitam di belakang pupil pas gerak". Percobaan clamp flat
-      // (`max(color, floor)`) SALAH TARGET — itu nge-flat-in SELURUH area
-      // yg ke-expose jadi satu warna rata (kelihatan kayak "blob" gak ada
-      // detail iris/pupil), krn gak bisa mbedain "vertex kap depan yg
-      // teksturnya kebetulan gelap" vs "vertex sisi yg emang gak ada
-      // datanya" — nge-clamp dua2nya sama rata.
-      // Fix yg lebih presisi: klasifikasi per-VERTEX (bukan per-hasil-
-      // sample) pake NORMAL bind-pose (SEBELUM skinning) — properti tetap
-      // tiap vertex, gak berubah pas animasi. Vertex yg secara struktural
-      // "kap depan" (normal bind-pose-nya searah rata2 normal seluruh
-      // mesh, dihitung di JS di bawah) dikasih tau shader buat nampilin
-      // texture asli; vertex "bukan kap depan" (sisi/belakang, emang gak
-      // pernah dilukis) dikasih fallback warna polos — regardless textur
-      // hasil sample-nya keliatan gelap ATAU kebetulan agak terang, krn
-      // areanya emang bukan area yg valid buat ditampilin.
-      const normAttr = mesh.geometry.attributes.normal;
-      const avgNormal = new THREE.Vector3();
-      for (let vi = 0; vi < normAttr.count; vi++) {
-        avgNormal.x += normAttr.getX(vi);
-        avgNormal.y += normAttr.getY(vi);
-        avgNormal.z += normAttr.getZ(vi);
-      }
-      avgNormal.divideScalar(normAttr.count).normalize();
-
+      // kamera. Texture iris/sclera cuma dilukis di lingkaran TENGAH atlas
+      // (pupil PERSIS di UV 0.5,0.5 — dicek langsung dari file texture-nya);
+      // pojok2 atlas di luar lingkaran itu backing/padding coklat-maroon
+      // GELAP yg gak pernah dimaksud keliatan. Begitu gaze rotasi, vertex
+      // yg UV-nya di luar lingkaran itu bisa ikut ke-expose ngadep kamera.
+      // Percobaan 1 (clamp flat max(color,floor)) SALAH TARGET — nge-flat-
+      // in tiap pixel gelap jadi rata, ngerusak detail pupil (yg emang
+      // gelap secara natural) juga. Percobaan 2 (klasifikasi pake NORMAL
+      // bind-pose) MENDINGAN tapi masih keliatan gangguan pas gaze extreme
+      // — normal itu proxy TIDAK LANGSUNG, kemungkinan keganggu morph
+      // target/blendshape ekspresi wajah yg overlap dikit ke area mata.
+      // Fix yg PALING presisi: klasifikasi langsung dari JARAK UV ke
+      // TITIK TENGAH (0.5, 0.5) — properti PALING LANGSUNG nunjukin "apa
+      // pixel ini di dalem lingkaran yg dilukis apa nggak", gak lewat
+      // proxy apapun. radius 0.4 (tepi lingkaran putih sclera, diukur dari
+      // file texture) dipake sbg batas: dalem radius situ full texture
+      // asli (termasuk pupil yg emang gelap natural — gak ikut ke-flatten
+      // lagi), di luar radius pelan2 blend ke fallback.
       const basic = new THREE.MeshBasicMaterial({
         map: m.map,
         side: m.side,
@@ -276,24 +276,14 @@ export function setupMaterials(mesh) {
       });
       basic.toneMapped = false;
       basic.onBeforeCompile = (shader) => {
-        shader.uniforms.uFrontAxis = { value: avgNormal };
-        shader.vertexShader = shader.vertexShader
-          .replace('#include <common>', '#include <common>\nvarying vec3 vBindNormal;')
-          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBindNormal = normal;'); // attribute mentah, SEBELUM skinning
-        shader.fragmentShader = shader.fragmentShader
-          .replace('uniform vec3 diffuse;', 'uniform vec3 diffuse;\nuniform vec3 uFrontAxis;\nvarying vec3 vBindNormal;')
-          .replace(
-            '#include <map_fragment>',
-            `#include <map_fragment>
-            float frontness = dot(normalize(vBindNormal), uFrontAxis);
-            // smoothstep sempit di sekitar "tepi kap depan" — vertex yg
-            // jelas di kap depan (frontness tinggi) full pake texture asli;
-            // vertex yg jelas bukan (frontness rendah) full fallback;
-            // transisi halus di antaranya biar gak ada garis potong tajam.
-            float useTexture = smoothstep(0.15, 0.55, frontness);
-            vec3 fallbackColor = vec3(0.30, 0.20, 0.13);
-            diffuseColor.rgb = mix(fallbackColor, diffuseColor.rgb, useTexture);`
-          );
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <map_fragment>',
+          `#include <map_fragment>
+          float uvDist = length(vUv - vec2(0.5));
+          float useTexture = 1.0 - smoothstep(0.32, 0.42, uvDist);
+          vec3 fallbackColor = vec3(0.30, 0.20, 0.13);
+          diffuseColor.rgb = mix(diffuseColor.rgb, fallbackColor, 1.0 - useTexture);`
+        );
       };
       if (isArray) mesh.material[i] = basic;
       else mesh.material = basic;
