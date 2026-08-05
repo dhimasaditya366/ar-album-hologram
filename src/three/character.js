@@ -199,6 +199,47 @@ export function setupMaterials(mesh) {
       return;
     }
 
+    // Mata (cornea) — root cause "mata jadi hitam" udah diverifikasi lewat
+    // debug (emissive merah dipaksa nyala di material ini, kelihatan pas
+    // di posisi mata → mesh-nya bener target-nya, BUKAN salah mesh):
+    // di pose animasi ini kelopak mata agak turun/nunduk, jadi permukaan
+    // bola mata hampir sepenuhnya ke-occlude dari key light (satu2nya
+    // light yg castShadow) DAN dari sudut yg pas buat specular fill/rim —
+    // hasilnya diffuse+specular biasa jatuh ke ~0 di situ, padahal texture
+    // base-nya sendiri (iris coklat + sclera) full berwarna, cuma gak
+    // pernah "nyala" krn gak ada cahaya yg nyampe.
+    // Fix: clearcoat (lapisan "basah" cornea, spec lobe sendiri gak
+    // gantung ke roughness base layer — bikin catch-light lebih gampang
+    // muncul pas ADA cahaya yg nyampe) + emissiveMap pakai texture asli
+    // sendiri di intensity RENDAH (0.25) sbg "lantai" minimum — jadi mata
+    // gak akan pernah jatuh ke hitam solid regardless pose/sudut/shadow,
+    // tapi tetep react normal ke lighting asli begitu ada yg nyampe
+    // (emissive cuma nambahin dasar redup, bukan ngedominasi/bikin
+    // "menyala" berlebihan).
+    const isEye = /^MI_Eye/i.test(texName);
+    if (isEye && m.type === 'MeshStandardMaterial') {
+      const physical = new THREE.MeshPhysicalMaterial({
+        map: m.map,
+        color: m.color.clone(),
+        roughness: m.roughness,
+        metalness: m.metalness,
+        normalMap: m.normalMap,
+        normalScale: m.normalScale?.clone(),
+        side: m.side,
+        transparent: m.transparent,
+        opacity: m.opacity,
+      });
+      physical.envMapIntensity = 1.1; // dinaikin dari flat 0.55 — mata butuh reflection lebih kuat drpd skin/hair
+      physical.clearcoat = 1;
+      physical.clearcoatRoughness = 0.08;
+      physical.emissiveMap = m.map;
+      physical.emissive = new THREE.Color(0xffffff);
+      physical.emissiveIntensity = 0.25;
+      if (isArray) mesh.material[i] = physical;
+      else mesh.material = physical;
+      return;
+    }
+
     // Kulit — material aslinya MeshStandardMaterial polos, roughness FLAT
     // (gak ada roughnessMap) → itu penyebab kesan "plastic/waxy": T-zone
     // (dahi/hidung) & pipi kena treatment roughness yg sama persis, gak ada
