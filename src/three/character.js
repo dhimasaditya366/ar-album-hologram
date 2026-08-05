@@ -162,6 +162,26 @@ float shNoise(vec2 p) {
 }
 `;
 
+// Dorong tiap vertex mesh keluar sepanjang normal-nya sendiri (world-space,
+// pivot-independent) — dipake buat ngatasin z-fighting antara 2 permukaan
+// yg nyaris coincident. Clone geometry-nya dulu (jangan mutate yg mungkin
+// di-share sama primitive lain).
+function inflateGeometry(mesh, amount) {
+  const geom = mesh.geometry.clone();
+  const pos = geom.attributes.position;
+  const norm = geom.attributes.normal;
+  for (let vi = 0; vi < pos.count; vi++) {
+    pos.setXYZ(
+      vi,
+      pos.getX(vi) + norm.getX(vi) * amount,
+      pos.getY(vi) + norm.getY(vi) * amount,
+      pos.getZ(vi) + norm.getZ(vi) * amount
+    );
+  }
+  pos.needsUpdate = true;
+  mesh.geometry = geom;
+}
+
 /* ────────────────────────────────────────────────────────────────────── */
 /* Material — kulit & material umum non-rambut                             */
 /* ────────────────────────────────────────────────────────────────────── */
@@ -203,45 +223,17 @@ export function setupMaterials(mesh) {
     // eye-socket yg posisinya nyaris coincident secara depth (dikonfirmasi
     // via test raw/unmodified material — user tetep liat hitam, jadi ini
     // emang bug asli file GLB-nya, bukan efek samping perubahan lain).
-    // 2 percobaan sebelumnya gagal:
-    // 1) polygonOffset (screen-space depth-buffer trick) — dihitung dari
-    //    SLOPE polygon yg berubah sesuai jarak/sudut kamera, jadi gak ada
-    //    satu angka yg pas di semua jarak (AR deket → kurang, Preview3D
-    //    zoom in → kelebihan/nembus).
-    // 2) mesh.scale.multiplyScalar (world-space, tapi scale di OBJECT
-    //    level) — bahkan di 1.15 (15%!) ZERO efek keliatan, baik ukuran
-    //    maupun fix hitamnya. Kemungkinan besar local origin/pivot mesh
-    //    ini GAK ada di tengah bola mata sendiri (skinned mesh, pivot
-    //    ngikut posisi bone/armature) — jadi scale di sekitar pivot yg
-    //    "salah tempat" itu gak nginflate permukaan yg keliatan.
-    // Fix yg akhirnya BENER: modifikasi GEOMETRY langsung — dorong tiap
-    // VERTEX keluar sepanjang normal-nya sendiri (per-vertex, gak gantung
-    // pivot/origin object sama sekali). Ini world-space beneran & pivot-
-    // independent, jadi konsisten di jarak/sudut kamera manapun.
+    // 2 percobaan sebelumnya gagal (polygonOffset — screen-space trick yg
+    // slope-nya berubah2 sesuai jarak/sudut kamera; mesh.scale — pivot
+    // object-nya gak di tengah bola mata, ZERO efek biar udah 15%). Fix yg
+    // akhirnya BENER: inflateGeometry — dorong tiap VERTEX keluar sepanjang
+    // normal-nya sendiri, world-space & pivot-independent. 0.0012 dipilih
+    // (~8-9% dari radius bola mata yg cuma ~0.014 unit) — cukup nembus
+    // z-fight margin, gak nutupin kelopak mata (0.004/28% percobaan
+    // pertama kelewatan, nutup kelopak).
     const isEye = /^MI_Eye/i.test(texName);
     if (isEye) {
-      const geom = mesh.geometry.clone(); // clone — jangan mutate geometry yg mungkin di-share
-      const pos = geom.attributes.position;
-      const norm = geom.attributes.normal;
-      // Bola mata radius-nya cuma ~0.014 unit (diukur langsung) — inflate
-      // 0.004 (percobaan pertama) ternyata ~28% dari radius sendiri,
-      // KEGEDEAN → permukaannya nembus/nutupin kelopak mata di sekitarnya
-      // ("kelopak ilang"). Diturunin ke 0.0012 (~8-9% radius) — dites di 3
-      // jarak kamera beda (jauh/sedang/deket), masih cukup buat nembus
-      // z-fight margin tapi kelopak mata tetep keliatan natural, gak
-      // ketutupan.
-      const inflate = 0.0012;
-      for (let vi = 0; vi < pos.count; vi++) {
-        pos.setXYZ(
-          vi,
-          pos.getX(vi) + norm.getX(vi) * inflate,
-          pos.getY(vi) + norm.getY(vi) * inflate,
-          pos.getZ(vi) + norm.getZ(vi) * inflate
-        );
-      }
-      pos.needsUpdate = true;
-      mesh.geometry = geom;
-
+      inflateGeometry(mesh, 0.0012);
       const basic = new THREE.MeshBasicMaterial({
         map: m.map,
         side: m.side,
@@ -251,6 +243,25 @@ export function setupMaterials(mesh) {
       basic.toneMapped = false;
       if (isArray) mesh.material[i] = basic;
       else mesh.material = basic;
+      return;
+    }
+
+    // Lacrimal fluid (lapisan "basah" tipis yg nempel di ATAS permukaan
+    // cornea, buat kesan mata berkaca-kaca) — diukur langsung dari GLB:
+    // titik terdepan lapisan ini cuma ~0.0007 unit di depan titik terdepan
+    // cornea RAW (belum di-inflate). Begitu cornea di-inflate 0.0012 (di
+    // atas), margin 0.0007 itu KEBABLASAN kelewatan di beberapa vertex
+    // (curvature bola mata bikin margin asli gak seragam), bikin cornea
+    // nembus/z-fight sama lapisan ini — kerasa sbg "ada object lain
+    // overlapping" yg keluar-masuk pas mata/kelopak gerak (curah beda2
+    // vertex punya margin beda2 pas skinning-nya bergeser). Fix: dorong
+    // lapisan ini JUGA keluar, lebih jauh drpd cornea (0.0022 > 0.0012),
+    // biar tetep "di atas" cornea yg udah di-inflate — preserve hubungan
+    // relatif asli (wet layer selalu di depan cornea), bukan cornea
+    // nyodok nembus dia.
+    const isLacrimalFluid = /LacrimalFluid/i.test(texName);
+    if (isLacrimalFluid) {
+      inflateGeometry(mesh, 0.0022);
       return;
     }
 
