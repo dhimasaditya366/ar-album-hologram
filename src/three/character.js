@@ -221,8 +221,14 @@ export function setupMaterials(mesh) {
       });
       basic.toneMapped = false;
       basic.polygonOffset = true;
-      basic.polygonOffsetFactor = -4;
-      basic.polygonOffsetUnits = -4;
+      // -4 cukup buat menangin z-fight di SATU pose yg dites, tapi cornea
+      // ini nempel di skinned mesh (ikut deform pas kelopak gerak/blink/
+      // gaze rotation) — margin z-fight-nya GAK konstan sepanjang animasi,
+      // jadi offset kecil bisa kalah lagi di pose lain. Dinaikin ke -10
+      // buat headroom lebih gede, robust di seluruh rentang gerakan
+      // kelopak, bukan cuma di pose yg kebetulan kena tes.
+      basic.polygonOffsetFactor = -10;
+      basic.polygonOffsetUnits = -10;
       if (isArray) mesh.material[i] = basic;
       else mesh.material = basic;
       return;
