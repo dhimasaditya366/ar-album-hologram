@@ -232,9 +232,16 @@ export function setupMaterials(mesh) {
       physical.envMapIntensity = 1.1; // dinaikin dari flat 0.55 — mata butuh reflection lebih kuat drpd skin/hair
       physical.clearcoat = 1;
       physical.clearcoatRoughness = 0.08;
-      physical.emissiveMap = m.map;
-      physical.emissive = new THREE.Color(0xffffff);
-      physical.emissiveIntensity = 0.25;
+      // emissiveMap (pake texture asli) SEMPAT dicoba tapi gak ngefek —
+      // bola mata ROTASI ikut gaze (bone-driven), jadi UV yg ke-sample di
+      // titik yg ngadep kamera IKUT GESER pas gaze-nya nunduk/miring, bisa
+      // jatuh ke area luar lukisan iris/sclera (padding/backing texture yg
+      // gelap) — dikaliin emissiveIntensity setinggi apapun ya tetep hasil
+      // gelap kalau sample-nya sendiri udah gelap. Ganti ke FLAT color
+      // (gak terikat UV/rotasi sama sekali) — warna coklat iris rata2,
+      // selalu ada terlepas dari kemana gaze-nya ngarah.
+      physical.emissive = new THREE.Color(0x3a2a1c);
+      physical.emissiveIntensity = 0.8;
       if (isArray) mesh.material[i] = physical;
       else mesh.material = physical;
       return;
