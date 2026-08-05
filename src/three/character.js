@@ -332,7 +332,15 @@ export function setupHairMaterial(mesh) {
           .replace(
             '#include <map_fragment>',
             `#include <map_fragment>
-            diffuseColor.a = smoothstep(0.05, 0.22, diffuseColor.a);
+            // Threshold diketatin (0.05–0.22 → 0.02–0.13) — di background/
+            // ambient GELAP (setup lama) gap tipis antar-card gak kerasa krn
+            // nyatu ke gelap; begitu scene di-retune ke bright/high-key
+            // (background terang + fill/hemi jauh lebih kuat), gap yg sama
+            // jadi kenapa lebih exposed & rambut keliatan "tipis/renggang".
+            // Range lebih sempit = lebih banyak texel alpha rendah ikut
+            // dianggap "ada isi", nutup gap tanpa ngilangin strand tipis
+            // beneran (yg alpha-nya di bawah 0.02).
+            diffuseColor.a = smoothstep(0.02, 0.13, diffuseColor.a);
             // Root-to-tip tint: akar (deket scalp) sedikit lebih gelap
             // (occlusion natural), ujung sedikit lebih terang — kesan
             // volume. Asumsi konvensi UV.v: 0 = akar, 1 = ujung strand;
@@ -343,10 +351,15 @@ export function setupHairMaterial(mesh) {
             // Flyaway wispy strands: di sudut grazing (fresnel, deket
             // siluet tepi kepala) alpha di-mix sama noise, jadi tepi
             // rambut pecah dikit / gak solid kaku kayak "dicat" rata.
+            // Faktor fresnel diturunin 0.55 → 0.28 — sama alasan kayak
+            // threshold di atas: efek wispy ini kena area LUAS di kepala
+            // bulat (fresnel tinggi di banyak sudut normal, bukan cuma
+            // siluet tepi doang), jadi di background terang efeknya
+            // kebaca sbg rambut tipis merata, bukan cuma flyaway di tepi.
             vec3 viewDir = normalize(vViewPosition);
             float fresnel = pow(1.0 - saturate(dot(normalize(vNormal), viewDir)), 3.0);
             float edgeNoise = shNoise(vUv * 45.0);
-            diffuseColor.a *= mix(1.0, edgeNoise, fresnel * 0.55);`
+            diffuseColor.a *= mix(1.0, edgeNoise, fresnel * 0.28);`
           );
       };
     }
