@@ -199,11 +199,34 @@ export function setupMaterials(mesh) {
       return;
     }
 
-    // Mata (cornea) — semua custom treatment (clearcoat/emissive/flat-color/
-    // MeshBasicMaterial/polygonOffset, berbagai percobaan) di-REVERT total
-    // atas permintaan user, balik ke material bawaan GLB apa adanya (cuma
-    // kena envMapIntensity=0.55 generic di atas, sama kayak material lain
-    // yg gak ke-match kategori manapun di bawah ini).
+    // Mata (cornea) — sempat di-revert total ke material bawaan GLB buat
+    // ngetes apakah "hitam"-nya itu emang bug asli dari file-nya sendiri
+    // (bukan efek samping dari perubahan2 sebelumnya) — user konfirmasi
+    // TETEP HITAM di raw/unmodified material juga, jadi ini terbukti bug
+    // asli si file GLB (cornea mesh Z-FIGHTING sama geometry eye-socket yg
+    // posisinya nyaris coincident secara depth — kalah z-fight = pixel-nya
+    // gak pernah ke-draw, regardless material/warna apapun). Pasang balik
+    // fix-nya: polygonOffset ngegeser depth-value EFEKTIF cornea sedikit
+    // lebih deket ke kamera TANPA gerakin geometry beneran (occlusion asli
+    // dari kelopak mata pas merem tetep jalan normal). MeshBasicMaterial
+    // (unlit) + texture asli (map) — gak flat color, biar detail
+    // iris/sclera foto aslinya keliatan natural.
+    const isEye = /^MI_Eye/i.test(texName);
+    if (isEye) {
+      const basic = new THREE.MeshBasicMaterial({
+        map: m.map,
+        side: m.side,
+        transparent: m.transparent,
+        opacity: m.opacity,
+      });
+      basic.toneMapped = false;
+      basic.polygonOffset = true;
+      basic.polygonOffsetFactor = -4;
+      basic.polygonOffsetUnits = -4;
+      if (isArray) mesh.material[i] = basic;
+      else mesh.material = basic;
+      return;
+    }
 
     // Kulit — material aslinya MeshStandardMaterial polos, roughness FLAT
     // (gak ada roughnessMap) → itu penyebab kesan "plastic/waxy": T-zone
