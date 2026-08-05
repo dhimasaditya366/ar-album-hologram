@@ -26181,15 +26181,20 @@ void main() {`).replace("#include <map_fragment>",`#include <map_fragment>
             float skinRoughVar = shNoise(vUv * 18.0) * 0.5 + shNoise(vUv * 5.0) * 0.5;
             roughnessFactor = clamp(roughnessFactor + (skinRoughVar - 0.5) * 0.22, 0.25, 0.82);`)},e?n.material[s]=d:n.material=d}})}function zCe(n){(Array.isArray(n.material)?n.material:[n.material]).forEach(t=>{var i;if(!t)return;"envMapIntensity"in t&&(t.envMapIntensity=.35);const r=((i=t.map)==null?void 0:i.name)??"",s=/cards/i.test(r);t.transparent&&(t.depthWrite=!0,t.alphaTest=.05,t.onBeforeCompile=a=>{a.fragmentShader=a.fragmentShader.replace("void main() {",`${zB}
 void main() {`).replace("#include <map_fragment>",`#include <map_fragment>
-            // Threshold diketatin (0.05–0.22 → 0.02–0.13) — di background/
-            // ambient GELAP (setup lama) gap tipis antar-card gak kerasa krn
-            // nyatu ke gelap; begitu scene di-retune ke bright/high-key
-            // (background terang + fill/hemi jauh lebih kuat), gap yg sama
-            // jadi kenapa lebih exposed & rambut keliatan "tipis/renggang".
-            // Range lebih sempit = lebih banyak texel alpha rendah ikut
-            // dianggap "ada isi", nutup gap tanpa ngilangin strand tipis
-            // beneran (yg alpha-nya di bawah 0.02).
-            diffuseColor.a = smoothstep(0.02, 0.13, diffuseColor.a);
+            // Threshold diketatin (0.05–0.22 → 0.02–0.13 → 0.02–0.06) — di
+            // background/ambient GELAP (setup lama) gap tipis antar-card gak
+            // kerasa krn nyatu ke gelap; begitu scene di-retune ke bright/
+            // high-key, gap yg sama jadi lebih exposed & rambut keliatan
+            // "tipis/renggang" — batas atas diturunin ke 0.13 buat nutup gap.
+            // TAPI itu nyisain range ramp yg lumayan lebar (0.02–0.13), jadi
+            // banyak texel yg lolos alphaTest (0.05) tapi alpha hasil
+            // remap-nya masih PECAHAN (bukan ~1), dan itu keliatan sbg
+            // rambut "nge-blend tembus" (haze) dari depan — bukan gap
+            // kosong lagi, tapi transparan-blur. Range dipersempit lagi ke
+            // 0.02–0.06 biar kurvanya curam: begitu ngelewatin alphaTest,
+            // langsung cepet jenuh ke alpha ~1 (solid), gak nyisa zona
+            // "separuh transparan" yg lebar.
+            diffuseColor.a = smoothstep(0.02, 0.06, diffuseColor.a);
             // Root-to-tip tint: akar (deket scalp) sedikit lebih gelap
             // (occlusion natural), ujung sedikit lebih terang — kesan
             // volume. Asumsi konvensi UV.v: 0 = akar, 1 = ujung strand;
