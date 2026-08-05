@@ -199,47 +199,36 @@ export function setupMaterials(mesh) {
       return;
     }
 
-    // Mata (cornea) — 4 percobaan sebelumnya (clearcoat+emissiveMap, flat
-    // emissive intensity rendah, flat emissive intensity tinggi + toneMapped
-    // false) semuanya keverifikasi BENER di testing otomatis (screenshot
-    // jelas nunjukin warna coklat), tapi user tetep laporan HITAM di device
-    // asli walau bundle ke-konfirmasi udah versi terbaru. Drpd nambah lagi
-    // parameter di material LIT (StandardMaterial) yg lightingnya kompleks
-    // & mungkin gak konsisten di semua GPU mobile — ganti total ke
-    // MeshBasicMaterial (UNLIT, gak ngitung lighting/shadow/tone-mapping
-    // curve sama sekali, cuma nampilin warna flat apa adanya). Ini
-    // operasi WebGL paling basic yg ada — kalau skin/hair (yg materialnya
-    // JAUH lebih kompleks) render bener di device user, yg ini pasti juga
-    // bener. Warna flat (bukan texture) sengaja — texture iris/sclera
-    // ROTASI ikut gaze (bone-driven), jadi masih ada resiko UV yg
-    // ke-sample jatuh ke area gelap; warna flat SAMA SEKALI gak gantung
-    // UV/gaze/lighting apapun.
+    // Mata (cornea) — root cause akhirnya ketemu: BUKAN soal warna/lighting
+    // material sama sekali (6 percobaan sebelumnya semua gagal krn ini) —
+    // cornea mesh Z-FIGHTING sama geometry eye-socket yg posisinya nyaris
+    // coincident secara depth. Kalah z-fight = pixel-nya gak pernah
+    // ke-draw, regardless material/warna apapun. Diverifikasi lewat
+    // depthTest:false (warna langsung keliatan, walau occlusion-nya ikut
+    // ilang) — z-fight ini sensitif ke precision floating-point GPU yg
+    // beda antara software-rendering (testing environment) vs GPU hardware
+    // asli (device user), itu kenapa berkali-kali "keverifikasi bener" di
+    // testing tapi tetep hitam di HP.
+    // Fix: polygonOffset nge-geser depth-value EFEKTIF cornea sedikit
+    // lebih deket ke kamera TANPA gerakin geometry beneran — cukup buat
+    // menangin z-fight yg nyaris seri, occlusion asli (kelopak nutupin
+    // mata pas merem) tetep jalan normal krn depthTest tetep nyala.
+    // MeshBasicMaterial (unlit) dipilih drpd StandardMaterial biar gak ada
+    // dependency ke lighting rig sama sekali. PAKE texture asli (map),
+    // BUKAN flat color — percobaan flat color sempat dicoba pas belum tau
+    // root cause-nya (buat ngindarin resiko UV rotation ikut gaze nyampe
+    // area kosong texture-nya), tapi hasilnya keliatan "berantakan"/gak
+    // natural drpd foto asli iris/sclera-nya. Sekarang z-fight-nya udah
+    // ke-fix, texture aslinya aman dipasang balik.
     const isEye = /^MI_Eye/i.test(texName);
     if (isEye) {
       const basic = new THREE.MeshBasicMaterial({
-        color: 0x6b4a30,
+        map: m.map,
         side: m.side,
         transparent: m.transparent,
         opacity: m.opacity,
       });
       basic.toneMapped = false;
-      // Root cause KETEMU (setelah 5 percobaan lain gagal): ini SAMA SEKALI
-      // bukan soal warna/lighting material — cornea mesh Z-FIGHTING sama
-      // geometry eye-socket yg posisinya nyaris coincident secara depth.
-      // Kalah z-fight = pixel-nya gak pernah ke-draw, regardless warna
-      // apapun yg dipasang di material-nya. Diverifikasi lewat depthTest:
-      // false — begitu depth-test dimatiin, warna coklat-nya LANGSUNG
-      // keliatan (walau jadi nembus di posisi salah krn occlusion-nya ikut
-      // ilang). Z-fight itu sensitif ke precision floating-point GPU, yg
-      // beda antara software-rendering (environment testing otomatis —
-      // kebetulan menang) vs GPU hardware asli (device user — kalah) —
-      // itu kenapa berkali-kali "keverifikasi bener" di testing tapi tetep
-      // hitam di HP user.
-      // Fix yg BENER (bukan depthTest:false): polygonOffset nge-geser
-      // depth-value EFEKTIF cornea sedikit lebih deket ke kamera TANPA
-      // gerakin geometry beneran — cukup buat menangin z-fight yg nyaris
-      // seri, tapi occlusion asli (kelopak nutupin mata pas merem) tetep
-      // jalan normal krn depthTest tetep nyala.
       basic.polygonOffset = true;
       basic.polygonOffsetFactor = -4;
       basic.polygonOffsetUnits = -4;
