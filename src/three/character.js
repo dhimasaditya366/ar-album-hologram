@@ -217,8 +217,17 @@ export function setupMaterials(mesh) {
     // robust krn fitur dasar MeshStandardMaterial biasa.
     const isEye = /^MI_Eye/i.test(texName);
     if (isEye) {
-      m.emissive = new THREE.Color(0x3a2a1c);
-      m.emissiveIntensity = 0.8;
+      m.emissive = new THREE.Color(0x5a4028);
+      m.emissiveIntensity = 2;
+      // ACES tone mapping (renderer.toneMapping) bisa nekan warna redup di
+      // shadow area lebih jauh dari yg keliatan di preview desktop — device
+      // mobile beda GPU/driver bisa beda persis gimana curve-nya diterapin.
+      // toneMapped:false bikin OUTPUT material ini (emissive-nya doang
+      // kena efeknya paling gede, krn diffuse/specular part sebenernya
+      // gak terlalu sensitif) SKIP tone-mapping curve sama sekali — angka
+      // emissive yg di-set di atas keluar APA ADANYA di layar, gak
+      // digerus/dikompres curve tone-mapping apapun.
+      m.toneMapped = false;
       return;
     }
 
