@@ -64,18 +64,16 @@ export default function ARScene({ onBack }) {
     // ke setupRenderer() Preview3D.
     overlayRenderer.shadowMap.enabled = true;
     overlayRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    // Exact-match ke Preview3D (exposure 1.0, intensityScale default) sempat
-    // dicoba, tapi user tes lagi di HP & masih keliatan gelap. Root cause-nya
-    // BUKAN exposure — Preview3D dapet cahaya ambient tambahan dari PMREM
-    // envMap (RoomEnvironment, lihat setupEnvironment() di Preview3D.jsx)
-    // yg AR sengaja skip (gak ada HDRI relevan + hemat render cost). Tanpa
-    // env light itu, AR-nya emang lebih gelap dari Preview3D walau light
-    // rig-nya identik. Exposure 1.15 (naik dikit dari 1.0) buat kompensasi
-    // itu — ACES tone mapping ngerolloff highlight-nya (bukan clip keras),
-    // jadi angka segini masih aman dari overexposure (beda kasus sama
-    // percobaan lama 1.5 yg kegedean).
+    // Exposure 1.1 — sebelumnya 1.15 buat kompensasi AR gak punya PMREM
+    // envMap (lihat setupEnvironment() di Preview3D.jsx yg AR skip). Tapi
+    // rig lighting-nya sendiri (character.js setupLighting: fill+hemi)
+    // baru aja dinaikin BANYAK bareng retune high-key ke arah Menu 4
+    // (MultiAngleViewer), jadi gap "AR lebih gelap" itu sekarang udah jauh
+    // lebih kecil relatif ke keseluruhan brightness rig — exposure diturunin
+    // dikit drpd sebelumnya biar gak numpuk kecerahan (rig baru + exposure
+    // lama = resiko overexposed).
     overlayRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-    overlayRenderer.toneMappingExposure = 1.15;
+    overlayRenderer.toneMappingExposure = 1.1;
     overlayRenderer.outputEncoding = THREE.sRGBEncoding;
 
     overlayRenderer.domElement.style.cssText =
@@ -99,11 +97,11 @@ export default function ARScene({ onBack }) {
 
     /* ── Lighting: sama posisi/warna kayak Preview3D (key/fill/rim/hemi) —
        castShadow:true (ground/platform-nya nangkep contact shadow karakter,
-       gak keliatan ngambang). intensityScale 1.2 buat kompensasi ambient
-       PMREM envMap yg Preview3D punya tapi AR-nya skip (lihat komentar
-       toneMappingExposure di atas) — cuma naik dikit, bukan flat-in semua
-       kayak percobaan lama (1.7) yg bikin overexposed. ── */
-    setupLighting(overlayScene, { castShadow: true, intensityScale: 1.2 });
+       gak keliatan ngambang). intensityScale dibalikin ke default (1, gak
+       di-scale lagi) — base rig di character.js udah dinaikin banyak sendiri
+       (retune high-key), scale tambahan 1.2 di atas itu udah gak perlu &
+       resiko numpuk ke overexposed. ── */
+    setupLighting(overlayScene, { castShadow: true });
 
     /* ── Hologram group (wrapper untuk gyro + drag rotate) ── */
     const hologramGroup = new THREE.Group();

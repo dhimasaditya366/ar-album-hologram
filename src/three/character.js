@@ -37,11 +37,13 @@ export function setupLighting(scene, { debug = false, castShadow = true, intensi
 
   // Key — sumber cahaya utama, diagonal atas-depan, satu-satunya yg cast
   // shadow (fill/rim gak usah, biar shadow gak dobel/berantakan).
-  // Sempat 1.2 → kebukti overexposed, diturunin ke 0.95. User minta naik
-  // lagi tanpa angka pasti ("something in between") — 1.05 dipilih sbg
-  // titik tengah antara 0.95 (udah kebukti aman) dan 1.2 (udah kebukti
-  // ketinggian).
-  const key = new THREE.DirectionalLight(0xffffff, 1.05 * s);
+  // Diturunin dikit dari 1.05 ke 0.95 — bagian dari retune rig ke arah
+  // "bright flat high-key" (nyamain mood ke video Menu 4/MultiAngleViewer,
+  // yg pre-rendered Blender & keliatan nyaris shadowless/flat drpd studio
+  // moody 3-point kayak sebelumnya). Fill+hemi di bawah dinaikin BANYAK
+  // buat ngangkat shadow-side, jadi key gak perlu setinggi dulu buat tetep
+  // jadi sumber dominan.
+  const key = new THREE.DirectionalLight(0xffffff, 0.95 * s);
   key.position.set(1.1, 1.7, 1.4);
   key.target.position.set(0, 0.1, 0);
   // castShadow bisa dimatiin (AR) — gak ada ground/floor buat nangkep
@@ -67,33 +69,38 @@ export function setupLighting(scene, { debug = false, castShadow = true, intensi
   }
   scene.add(key, key.target);
 
-  // Fill — lawan arah key, redup, agak kebiruan biar shadow area gak item
-  // mati. Posisi digeser ke depan (Z positif, deket sama key yg di Z=1.4)
-  // dari sebelumnya agak di belakang (Z=-0.5) — biar bener2 "ngangkat"
-  // rahang kiri yg jadi sisi berlawanan dari key light, bukan cuma ngisi
-  // ambient belakang yg gak kena rahang.
-  const fill = new THREE.DirectionalLight(0xdce6ff, 0.33 * s);
+  // Fill — lawan arah key, posisi digeser ke depan (Z positif, deket sama
+  // key yg di Z=1.4) biar bener2 "ngangkat" rahang kiri yg jadi sisi
+  // berlawanan dari key light, bukan cuma ngisi ambient belakang yg gak
+  // kena rahang. Intensity dinaikin GEDE (0.33 → 0.75) & warna dinetralin
+  // (0xdce6ff kebiruan → 0xfff3e8 netral-hangat) — retune ke high-key flat
+  // (referensi: video Menu 4/MultiAngleViewer, hampir gak ada falloff
+  // kiri-kanan & gak ada rona biru di shadow-nya). Fill setinggi ini
+  // sengaja ngerata-in kontras key-vs-fill yg dulu kuat.
+  const fill = new THREE.DirectionalLight(0xfff3e8, 0.75 * s);
   fill.position.set(-1.3, 0.85, 0.9);
   fill.target.position.set(0, 0.1, 0);
   scene.add(fill, fill.target);
 
   // Rim/back — di belakang-atas karakter, buat highlight siluet rambut & bahu.
-  // 0.8 awalnya ketinggian & nembus rambut — root cause-nya (depthWrite:false)
-  // udah dibenerin di material hair (lihat setupHairMaterial), lalu sempat
-  // naik ke 0.65 buat highlight glossy, tapi user bilang rambut jadi
-  // kemengkilatan → diturunin ke 0.5. Sekarang minta naik lagi tanpa angka
-  // pasti — 0.6 dipilih sbg titik tengah, dan karena rambut sekarang matte
-  // (roughness tinggi, clearcoat/sheen 0 di setupHairMaterial) rim setinggi
-  // ini gak bakal balik jadi "shiny", cuma nge-highlight siluet aja.
-  const rim = new THREE.DirectionalLight(0xfff4e0, 0.6 * s);
+  // Diturunin (0.6 → 0.28) & warna dinetralin (0xfff4e0 keemasan → 0xffffff
+  // putih polos) — referensi Menu 4 (video) rambutnya keliatan flat matte
+  // TANPA edge-glow keemasan sama sekali, jadi rim di-retune biar cuma
+  // nyisain highlight tipis buat misahin siluet dari background, bukan
+  // elemen "glow" yg mencolok kayak sebelumnya.
+  const rim = new THREE.DirectionalLight(0xffffff, 0.28 * s);
   rim.position.set(-0.3, 1.8, -1.9);
   rim.target.position.set(0, 0.2, 0);
   scene.add(rim, rim.target);
 
   // Hemisphere lembut — ambient yg lebih natural dari AmbientLight polos
-  // (langit kebiruan dari atas, pantulan lantai kecoklatan dari bawah).
-  // Diturunin dikit biar gak nambah overall brightness dobel sama PMREM env.
-  const hemi = new THREE.HemisphereLight(0xbfd4ff, 0x1a1410, 0.2 * s);
+  // (langit dari atas, pantulan lantai dari bawah). Intensity dinaikin
+  // GEDE (0.2 → 0.5) & warnanya dinetralin/dicerahin (sky kebiruan pekat →
+  // lebih putih-lembut, ground coklat nyaris item → abu-hangat) — bagian
+  // dari retune high-key: ambient fill setinggi ini yg bikin shadow gak
+  // pernah jatuh gelap total, mendekati kesan "flat softbox" di video
+  // Menu 4.
+  const hemi = new THREE.HemisphereLight(0xeef2f7, 0x3a332e, 0.5 * s);
   scene.add(hemi);
 
   // Soft side fill (kiri & kanan wajah) — diminta krn pipi kadang masih

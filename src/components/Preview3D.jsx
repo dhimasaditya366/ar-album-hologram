@@ -47,12 +47,13 @@ function setupRenderer(container, width, height) {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  // 1.1 kemarin bikin skin & rambut overexposed (flat, "digital light box"),
-  // makanya diturunin ke 0.92. User minta naik lagi ke ~1.1 belakangan tanpa
-  // kasih angka pasti ("something in between") — 1.0 dipilih sbg titik
-  // tengah: sedikit lebih terang dari 0.92 tapi gak balik ke 1.1 yg udah
-  // kebukti overexposed.
-  renderer.toneMappingExposure = 1.0;
+  // Dinaikin dari 1.0 ke 1.2 — bagian dari retune ke "bright flat high-key"
+  // (nyamain mood ke video Menu 4/MultiAngleViewer yg pre-rendered Blender,
+  // exposure-nya jauh lebih terang/nyaris high-key drpd studio moody
+  // sebelumnya). Rig lighting-nya sendiri (character.js) udah dinaikin
+  // signifikan (fill+hemi), jadi exposure ini nambahin dikit lagi di atas
+  // itu, bukan sumber utama kenaikan brightness-nya.
+  renderer.toneMappingExposure = 1.2;
   // three@0.147 pakai API lama (outputEncoding); versi three yg lebih baru
   // ganti nama jadi outputColorSpace = THREE.SRGBColorSpace — efeknya sama.
   renderer.outputEncoding = THREE.sRGBEncoding;
@@ -106,6 +107,11 @@ async function setupEnvironment(renderer, scene) {
 
 // Background studio: vignette radial halus (bukan polos flat), digambar ke
 // CanvasTexture — gak butuh asset gambar eksternal.
+// Dulu navy gelap (#232b3d→#05070b) buat mood "moody 3-point studio". Diganti
+// terang/netral (referensi: backdrop putih-abu di video Menu 4/
+// MultiAngleViewer) sbg bagian dari retune high-key — gradient-nya dipertahanin
+// (bukan flat polos) tapi transisinya jauh lebih tipis drpd versi gelap biar
+// gak balik keliatan kayak vignette berat di atas background terang.
 function createStudioBackground() {
   const size = 512;
   const canvas = document.createElement('canvas');
@@ -115,9 +121,9 @@ function createStudioBackground() {
     size / 2, size * 0.42, size * 0.05,
     size / 2, size * 0.5, size * 0.72
   );
-  grad.addColorStop(0, '#232b3d');
-  grad.addColorStop(0.55, '#141a26');
-  grad.addColorStop(1, '#05070b');
+  grad.addColorStop(0, '#f2f2f4');
+  grad.addColorStop(0.6, '#e2e3e6');
+  grad.addColorStop(1, '#c9cbd0');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, size, size);
   const texture = new THREE.CanvasTexture(canvas);
@@ -144,12 +150,13 @@ export default function Preview3D({ onBack }) {
 
     const scene = new THREE.Scene();
     scene.background = createStudioBackground();
-    // Fog tipis, warna senada background navy gelap — nambah depth cue
-    // (karakter jauh dari kamera dikit "menyatu" ke background), bukan buat
-    // nyembunyiin apa2 (density kecil, karakter deket kamera nyaris gak
-    // kena). FogExp2 (eksponensial) dipilih drpd Fog linear biar falloff-nya
-    // lembut, gak ada garis batas fog yg keliatan.
-    scene.fog = new THREE.FogExp2(0x05070b, 0.05);
+    // Fog tipis, warna senada background terang (di-update bareng retune
+    // high-key createStudioBackground() — dulu navy gelap 0x05070b) — nambah
+    // depth cue (karakter jauh dari kamera dikit "menyatu" ke background),
+    // bukan buat nyembunyiin apa2 (density kecil, karakter deket kamera
+    // nyaris gak kena). FogExp2 (eksponensial) dipilih drpd Fog linear biar
+    // falloff-nya lembut, gak ada garis batas fog yg keliatan.
+    scene.fog = new THREE.FogExp2(0xc9cbd0, 0.05);
 
     const lighting = setupLighting(scene, { debug: DEBUG });
     let envTexture = null;
@@ -316,10 +323,14 @@ export default function Preview3D({ onBack }) {
           canvas ngasih efek visual yg sama (fokus ketarik ke wajah) tanpa
           resiko WebGL itu — pointer-events:none jadi gak ganggu drag/zoom
           OrbitControls di canvas di baliknya. */}
+      {/* Vignette dilemesin banget (0.38 → 0.12 opacity, radius transparan
+          45% → 58%) bareng retune high-key — referensi Menu 4 gak nunjukin
+          vignette/pojok gelap sama sekali, jadi versi gelap lama bakal
+          keliatan aneh nabrak di atas background terang yg baru. */}
       <div style={{
         position: 'absolute', inset: 0, zIndex: 100,
         pointerEvents: 'none',
-        background: 'radial-gradient(ellipse at 50% 45%, transparent 45%, rgba(0,0,0,0.38) 100%)',
+        background: 'radial-gradient(ellipse at 50% 45%, transparent 58%, rgba(0,0,0,0.12) 100%)',
       }} />
 
       <div style={{
