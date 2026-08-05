@@ -199,35 +199,32 @@ export function setupMaterials(mesh) {
       return;
     }
 
-    // Mata (cornea) — root cause "mata jadi hitam" udah diverifikasi lewat
-    // debug (emissive merah dipaksa nyala di material ini, kelihatan pas
-    // di posisi mata → mesh-nya bener target-nya, BUKAN salah mesh): di
-    // pose2 tertentu bola mata hampir sepenuhnya ke-occlude dari cahaya
-    // (kelopak turun + eye-rotation ngikutin gaze), diffuse+specular biasa
-    // jatuh ke ~0 di situ walau texture base-nya sendiri (iris coklat +
-    // sclera) full berwarna.
-    // Fix: emissive FLAT color (bukan emissiveMap — itu SEMPAT dicoba tapi
-    // gak ngefek, krn bola mata rotasi ikut gaze jadi UV yg ke-sample bisa
-    // geser ke area luar lukisan iris/sclera yg gelap, dikaliin intensity
-    // berapa pun ya tetep gelap) di intensity RENDAH sbg "lantai" minimum.
-    // SENGAJA tetep di MeshStandardMaterial asli (bukan di-upgrade ke
-    // MeshPhysicalMaterial+clearcoat kayak percobaan sebelumnya) — clearcoat
-    // butuh shader path lebih kompleks yg kemungkinan gak konsisten di
-    // semua GPU mobile, sedangkan emissive polos udah cukup & jauh lebih
-    // robust krn fitur dasar MeshStandardMaterial biasa.
+    // Mata (cornea) — 4 percobaan sebelumnya (clearcoat+emissiveMap, flat
+    // emissive intensity rendah, flat emissive intensity tinggi + toneMapped
+    // false) semuanya keverifikasi BENER di testing otomatis (screenshot
+    // jelas nunjukin warna coklat), tapi user tetep laporan HITAM di device
+    // asli walau bundle ke-konfirmasi udah versi terbaru. Drpd nambah lagi
+    // parameter di material LIT (StandardMaterial) yg lightingnya kompleks
+    // & mungkin gak konsisten di semua GPU mobile — ganti total ke
+    // MeshBasicMaterial (UNLIT, gak ngitung lighting/shadow/tone-mapping
+    // curve sama sekali, cuma nampilin warna flat apa adanya). Ini
+    // operasi WebGL paling basic yg ada — kalau skin/hair (yg materialnya
+    // JAUH lebih kompleks) render bener di device user, yg ini pasti juga
+    // bener. Warna flat (bukan texture) sengaja — texture iris/sclera
+    // ROTASI ikut gaze (bone-driven), jadi masih ada resiko UV yg
+    // ke-sample jatuh ke area gelap; warna flat SAMA SEKALI gak gantung
+    // UV/gaze/lighting apapun.
     const isEye = /^MI_Eye/i.test(texName);
     if (isEye) {
-      m.emissive = new THREE.Color(0x5a4028);
-      m.emissiveIntensity = 2;
-      // ACES tone mapping (renderer.toneMapping) bisa nekan warna redup di
-      // shadow area lebih jauh dari yg keliatan di preview desktop — device
-      // mobile beda GPU/driver bisa beda persis gimana curve-nya diterapin.
-      // toneMapped:false bikin OUTPUT material ini (emissive-nya doang
-      // kena efeknya paling gede, krn diffuse/specular part sebenernya
-      // gak terlalu sensitif) SKIP tone-mapping curve sama sekali — angka
-      // emissive yg di-set di atas keluar APA ADANYA di layar, gak
-      // digerus/dikompres curve tone-mapping apapun.
-      m.toneMapped = false;
+      const basic = new THREE.MeshBasicMaterial({
+        color: 0x6b4a30,
+        side: m.side,
+        transparent: m.transparent,
+        opacity: m.opacity,
+      });
+      basic.toneMapped = false;
+      if (isArray) mesh.material[i] = basic;
+      else mesh.material = basic;
       return;
     }
 
