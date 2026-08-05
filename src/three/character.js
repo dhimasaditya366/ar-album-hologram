@@ -201,49 +201,24 @@ export function setupMaterials(mesh) {
 
     // Mata (cornea) — root cause "mata jadi hitam" udah diverifikasi lewat
     // debug (emissive merah dipaksa nyala di material ini, kelihatan pas
-    // di posisi mata → mesh-nya bener target-nya, BUKAN salah mesh):
-    // di pose animasi ini kelopak mata agak turun/nunduk, jadi permukaan
-    // bola mata hampir sepenuhnya ke-occlude dari key light (satu2nya
-    // light yg castShadow) DAN dari sudut yg pas buat specular fill/rim —
-    // hasilnya diffuse+specular biasa jatuh ke ~0 di situ, padahal texture
-    // base-nya sendiri (iris coklat + sclera) full berwarna, cuma gak
-    // pernah "nyala" krn gak ada cahaya yg nyampe.
-    // Fix: clearcoat (lapisan "basah" cornea, spec lobe sendiri gak
-    // gantung ke roughness base layer — bikin catch-light lebih gampang
-    // muncul pas ADA cahaya yg nyampe) + emissiveMap pakai texture asli
-    // sendiri di intensity RENDAH (0.25) sbg "lantai" minimum — jadi mata
-    // gak akan pernah jatuh ke hitam solid regardless pose/sudut/shadow,
-    // tapi tetep react normal ke lighting asli begitu ada yg nyampe
-    // (emissive cuma nambahin dasar redup, bukan ngedominasi/bikin
-    // "menyala" berlebihan).
+    // di posisi mata → mesh-nya bener target-nya, BUKAN salah mesh): di
+    // pose2 tertentu bola mata hampir sepenuhnya ke-occlude dari cahaya
+    // (kelopak turun + eye-rotation ngikutin gaze), diffuse+specular biasa
+    // jatuh ke ~0 di situ walau texture base-nya sendiri (iris coklat +
+    // sclera) full berwarna.
+    // Fix: emissive FLAT color (bukan emissiveMap — itu SEMPAT dicoba tapi
+    // gak ngefek, krn bola mata rotasi ikut gaze jadi UV yg ke-sample bisa
+    // geser ke area luar lukisan iris/sclera yg gelap, dikaliin intensity
+    // berapa pun ya tetep gelap) di intensity RENDAH sbg "lantai" minimum.
+    // SENGAJA tetep di MeshStandardMaterial asli (bukan di-upgrade ke
+    // MeshPhysicalMaterial+clearcoat kayak percobaan sebelumnya) — clearcoat
+    // butuh shader path lebih kompleks yg kemungkinan gak konsisten di
+    // semua GPU mobile, sedangkan emissive polos udah cukup & jauh lebih
+    // robust krn fitur dasar MeshStandardMaterial biasa.
     const isEye = /^MI_Eye/i.test(texName);
-    if (isEye && m.type === 'MeshStandardMaterial') {
-      const physical = new THREE.MeshPhysicalMaterial({
-        map: m.map,
-        color: m.color.clone(),
-        roughness: m.roughness,
-        metalness: m.metalness,
-        normalMap: m.normalMap,
-        normalScale: m.normalScale?.clone(),
-        side: m.side,
-        transparent: m.transparent,
-        opacity: m.opacity,
-      });
-      physical.envMapIntensity = 1.1; // dinaikin dari flat 0.55 — mata butuh reflection lebih kuat drpd skin/hair
-      physical.clearcoat = 1;
-      physical.clearcoatRoughness = 0.08;
-      // emissiveMap (pake texture asli) SEMPAT dicoba tapi gak ngefek —
-      // bola mata ROTASI ikut gaze (bone-driven), jadi UV yg ke-sample di
-      // titik yg ngadep kamera IKUT GESER pas gaze-nya nunduk/miring, bisa
-      // jatuh ke area luar lukisan iris/sclera (padding/backing texture yg
-      // gelap) — dikaliin emissiveIntensity setinggi apapun ya tetep hasil
-      // gelap kalau sample-nya sendiri udah gelap. Ganti ke FLAT color
-      // (gak terikat UV/rotasi sama sekali) — warna coklat iris rata2,
-      // selalu ada terlepas dari kemana gaze-nya ngarah.
-      physical.emissive = new THREE.Color(0x3a2a1c);
-      physical.emissiveIntensity = 0.8;
-      if (isArray) mesh.material[i] = physical;
-      else mesh.material = physical;
+    if (isEye) {
+      m.emissive = new THREE.Color(0x3a2a1c);
+      m.emissiveIntensity = 0.8;
       return;
     }
 

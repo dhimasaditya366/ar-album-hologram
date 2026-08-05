@@ -38,7 +38,6 @@ export default function ARScene({ onBack }) {
   const [ready,   setReady]   = useState(false);
 
   const handleBack = () => {
-    sessionStorage.removeItem('sw-reloaded');
     window.location.reload();
   };
 

@@ -22,7 +22,6 @@ export default function ARScanGate({ onFound, onBack }) {
   const [found,  setFound]  = useState(false);
 
   const handleBack = () => {
-    sessionStorage.removeItem('sw-reloaded');
     window.location.reload();
   };
 
