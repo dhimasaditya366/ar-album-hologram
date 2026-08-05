@@ -10,34 +10,23 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>AR Album Hologram</title>
     <script>
+      // Cache-busting: SW register pake URL STABIL (bukan ?v=Date.now() lagi
+      // — itu bikin browser nganggep tiap page load registrasi "SW baru",
+      // ke-trigger install→activate berulang tiap load). Auto-reload
+      // lewat postMessage() juga DIHAPUS (sempat dicoba 2x, dua2nya gagal:
+      // versi pertama guard sessionStorage-nya nyangkut abis reload
+      // pertama jadi update berikutnya diabaikan; abis guard dibuang malah
+      // infinite reload loop krn kombinasi sama ?v=Date.now() di atas).
+      // Cukup andalin: (1) filename JS/CSS di-hash per build (Vite) — build
+      // baru = URL baru = otomatis gak collision sama cache lama, (2)
+      // sw.js fetch handler (lihat public/sw.js) fetch index.html
+      // cache:'no-store' tiap navigasi begitu SW ini kecontrol — jadi
+      // sekali tab di-reload/re-open, DIJAMIN dapet index.html fresh yg
+      // nunjuk ke bundle JS/CSS hash terbaru. Gak ada "auto-refresh tab yg
+      // dibiarin kebuka" lagi, tapi itu trade-off yg pantes drpd resiko
+      // reload loop yg bikin app gak kebuka sama sekali.
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js?v=' + Date.now())
-          .then(reg => {
-            reg.update();
-            // Tab yg dibiarin kebuka lama (di-background-in, bukan di-reload
-            // fresh) gak pernah ngecek update lagi krn script ini cuma jalan
-            // sekali pas load awal. Tiap kali tab ini balik keliatan (user
-            // switch back dari app lain), paksa cek update lagi — biar gak
-            // nyangkut ke bundle lama selama-lamanya kalau tab gak pernah
-            // di-close beneran.
-            document.addEventListener('visibilitychange', () => {
-              if (document.visibilityState === 'visible') reg.update();
-            });
-          });
-        // Reload otomatis begitu SW baru aktif (cache lama ter-clear).
-        // DULU dibatasin sekali per session pake sessionStorage flag
-        // ('sw-reloaded') buat nyegah infinite-reload-loop — tapi flag itu
-        // gak pernah kereset selain lewat tombol Back di ARScene, jadi
-        // begitu ke-trigger SEKALI (di deploy manapun), SEMUA deploy
-        // berikutnya di session yg sama silent diabaikan (gak reload lagi)
-        // walau bundle-nya udah lama basi. Root cause laporan "gak keliatan
-        // berubah" yg terus berulang. Guard-nya dibuang: activate event SW
-        // sendiri udah cuma nembak pas ada versi BARU beneran (dijamin sama
-        // lifecycle SW-nya sendiri, gak akan loop tanpa ujung), jadi guard
-        // manual di sini emang gak perlu dari awal.
-        navigator.serviceWorker.addEventListener('message', function(e) {
-          if (e.data === 'SW_UPDATED') window.location.reload();
-        });
+        navigator.serviceWorker.register('./sw.js').then(reg => reg.update());
       }
     </script>
 
