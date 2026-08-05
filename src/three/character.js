@@ -239,13 +239,23 @@ export function setupMaterials(mesh) {
     // slope-nya berubah2 sesuai jarak/sudut kamera; mesh.scale — pivot
     // object-nya gak di tengah bola mata, ZERO efek biar udah 15%). Fix yg
     // akhirnya BENER: inflateGeometry — dorong tiap VERTEX keluar sepanjang
-    // normal-nya sendiri, world-space & pivot-independent. 0.0012 dipilih
-    // (~8-9% dari radius bola mata yg cuma ~0.014 unit) — cukup nembus
-    // z-fight margin, gak nutupin kelopak mata (0.004/28% percobaan
-    // pertama kelewatan, nutup kelopak).
+    // normal-nya sendiri, world-space & pivot-independent.
+    // 0.0012 (~8-9% radius) sempet cukup di testing tapi user tetep
+    // laporan residual hitam pas gaze gerak — DIUKUR LANGSUNG pixel
+    // texture-nya (bukan cuma diliat visual): area "unpainted backing" itu
+    // TERNYATA gak pernah bener2 hitam (paling gelap ~ (130,55,53), coklat-
+    // maroon, BUKAN (0,0,0)) — jadi residual hitam itu GAK MUNGKIN dari
+    // texture/UV-exposure sama sekali (mix antara 2 warna non-hitam gak
+    // akan pernah hasilin hitam murni). Satu2nya mekanisme yg BISA hasilin
+    // (0,0,0) asli ya z-fighting yg balik menang sesekali — outcome-nya
+    // sensitif ke precision GPU, GPU testing saya kemungkinan beda
+    // presisi/rounding dari GPU HP user, jadi 0.0012 yg "cukup" di GPU
+    // saya ternyata pas-pasan/kurang di GPU lain. Dinaikin ke 0.0025 (~18%
+    // radius) buat margin jauh lebih gede — masih di bawah 0.004/28% yg
+    // udah kebukti nutupin kelopak.
     const isEye = /^MI_Eye/i.test(texName);
     if (isEye) {
-      inflateGeometry(mesh, 0.0012);
+      inflateGeometry(mesh, 0.0025);
 
       // Bug lain (BEDA dari z-fighting): UV itu attribute TETAP nempel di
       // vertex tertentu, gak "ngikut" pas bola mata rotasi (gaze,
@@ -293,19 +303,13 @@ export function setupMaterials(mesh) {
     // Lacrimal fluid (lapisan "basah" tipis yg nempel di ATAS permukaan
     // cornea, buat kesan mata berkaca-kaca) — diukur langsung dari GLB:
     // titik terdepan lapisan ini cuma ~0.0007 unit di depan titik terdepan
-    // cornea RAW (belum di-inflate). Begitu cornea di-inflate 0.0012 (di
-    // atas), margin 0.0007 itu KEBABLASAN kelewatan di beberapa vertex
-    // (curvature bola mata bikin margin asli gak seragam), bikin cornea
-    // nembus/z-fight sama lapisan ini — kerasa sbg "ada object lain
-    // overlapping" yg keluar-masuk pas mata/kelopak gerak (curah beda2
-    // vertex punya margin beda2 pas skinning-nya bergeser). Fix: dorong
-    // lapisan ini JUGA keluar, lebih jauh drpd cornea (0.0022 > 0.0012),
-    // biar tetep "di atas" cornea yg udah di-inflate — preserve hubungan
-    // relatif asli (wet layer selalu di depan cornea), bukan cornea
-    // nyodok nembus dia.
+    // cornea RAW. Cornea di-inflate 0.0025 sekarang (naik dari 0.0012) —
+    // lapisan ini HARUS ikut naik proporsional juga, tetap lebih jauh drpd
+    // cornea, biar gak keduluan/ke-z-fight sama cornea yg udah didorong
+    // lebih jauh.
     const isLacrimalFluid = /LacrimalFluid/i.test(texName);
     if (isLacrimalFluid) {
-      inflateGeometry(mesh, 0.0022);
+      inflateGeometry(mesh, 0.0038);
       return;
     }
 
