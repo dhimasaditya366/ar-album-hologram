@@ -234,6 +234,40 @@ export function setupMaterials(mesh) {
     const isEye = /^MI_Eye/i.test(texName);
     if (isEye) {
       inflateGeometry(mesh, 0.0012);
+
+      // Bug lain (BEDA dari z-fighting): UV itu attribute TETAP nempel di
+      // vertex tertentu, gak "ngikut" pas bola mata rotasi (gaze,
+      // bone-driven) — yg gerak itu permukaan/vertex MANA yg lagi ngadep
+      // kamera. Texture iris/sclera cuma dilukis di satu "kap depan" bola
+      // mata; vertex2 di sisi/belakangnya (normalnya ketutup kelopak, gak
+      // pernah keliatan) UV-nya nunjuk ke area backing/padding GELAP di
+      // atlas yg sama. Begitu gaze rotasi, vertex "kap depan" yg dilukis
+      // itu geser MENJAUH dari kamera, & vertex LAIN (UV-nya nunjuk ke
+      // padding gelap) yg gantiin ngadep kamera — itu penyebab "hitam di
+      // sisi2" & "hitam di belakang pupil pas gerak". Percobaan clamp flat
+      // (`max(color, floor)`) SALAH TARGET — itu nge-flat-in SELURUH area
+      // yg ke-expose jadi satu warna rata (kelihatan kayak "blob" gak ada
+      // detail iris/pupil), krn gak bisa mbedain "vertex kap depan yg
+      // teksturnya kebetulan gelap" vs "vertex sisi yg emang gak ada
+      // datanya" — nge-clamp dua2nya sama rata.
+      // Fix yg lebih presisi: klasifikasi per-VERTEX (bukan per-hasil-
+      // sample) pake NORMAL bind-pose (SEBELUM skinning) — properti tetap
+      // tiap vertex, gak berubah pas animasi. Vertex yg secara struktural
+      // "kap depan" (normal bind-pose-nya searah rata2 normal seluruh
+      // mesh, dihitung di JS di bawah) dikasih tau shader buat nampilin
+      // texture asli; vertex "bukan kap depan" (sisi/belakang, emang gak
+      // pernah dilukis) dikasih fallback warna polos — regardless textur
+      // hasil sample-nya keliatan gelap ATAU kebetulan agak terang, krn
+      // areanya emang bukan area yg valid buat ditampilin.
+      const normAttr = mesh.geometry.attributes.normal;
+      const avgNormal = new THREE.Vector3();
+      for (let vi = 0; vi < normAttr.count; vi++) {
+        avgNormal.x += normAttr.getX(vi);
+        avgNormal.y += normAttr.getY(vi);
+        avgNormal.z += normAttr.getZ(vi);
+      }
+      avgNormal.divideScalar(normAttr.count).normalize();
+
       const basic = new THREE.MeshBasicMaterial({
         map: m.map,
         side: m.side,
@@ -241,27 +275,25 @@ export function setupMaterials(mesh) {
         opacity: m.opacity,
       });
       basic.toneMapped = false;
-      // Bug lain (BEDA dari z-fighting di atas): UV itu attribute TETAP di
-      // permukaan mesh, gak ikut gerak pas bola mata rotasi (gaze, bone-
-      // driven) — yg gerak itu permukaan MANA yg lagi ngadep kamera.
-      // Texture iris/sclera cuma dilukis di satu "kap depan" bola mata;
-      // sisi/belakangnya (normalnya ketutup kelopak, gak pernah keliatan)
-      // cuma backing/padding GELAP di atlas yg sama. Begitu gaze gerak,
-      // permukaan LAIN (UV beda, area padding gelap itu) bisa ikut ke-expose
-      // di sisi/tepi lubang mata — itu "hitam di sisi2" & "hitam di
-      // belakang pupil pas gerak" yg dilaporin, BUKAN z-fighting lagi (udah
-      // dibenerin duluan), ini soal UV-exposure. Inflate geometry gak bisa
-      // benerin ini. Fix: clamp warna hasil sample texture ke floor warna
-      // mata (coklat hangat) — area yg SUDAH terang (iris/sclera asli)
-      // gak kesentuh (udah di atas floor), area yg GELAP (padding/backing
-      // yg ke-expose) diangkat ke floor, jadi gak akan pernah jatuh ke
-      // hitam lagi dari sudut gaze manapun.
       basic.onBeforeCompile = (shader) => {
-        shader.fragmentShader = shader.fragmentShader.replace(
-          '#include <map_fragment>',
-          `#include <map_fragment>
-          diffuseColor.rgb = max(diffuseColor.rgb, vec3(0.28, 0.19, 0.12));`
-        );
+        shader.uniforms.uFrontAxis = { value: avgNormal };
+        shader.vertexShader = shader.vertexShader
+          .replace('#include <common>', '#include <common>\nvarying vec3 vBindNormal;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBindNormal = normal;'); // attribute mentah, SEBELUM skinning
+        shader.fragmentShader = shader.fragmentShader
+          .replace('uniform vec3 diffuse;', 'uniform vec3 diffuse;\nuniform vec3 uFrontAxis;\nvarying vec3 vBindNormal;')
+          .replace(
+            '#include <map_fragment>',
+            `#include <map_fragment>
+            float frontness = dot(normalize(vBindNormal), uFrontAxis);
+            // smoothstep sempit di sekitar "tepi kap depan" — vertex yg
+            // jelas di kap depan (frontness tinggi) full pake texture asli;
+            // vertex yg jelas bukan (frontness rendah) full fallback;
+            // transisi halus di antaranya biar gak ada garis potong tajam.
+            float useTexture = smoothstep(0.15, 0.55, frontness);
+            vec3 fallbackColor = vec3(0.30, 0.20, 0.13);
+            diffuseColor.rgb = mix(fallbackColor, diffuseColor.rgb, useTexture);`
+          );
       };
       if (isArray) mesh.material[i] = basic;
       else mesh.material = basic;
