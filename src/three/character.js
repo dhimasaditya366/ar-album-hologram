@@ -199,20 +199,42 @@ export function setupMaterials(mesh) {
       return;
     }
 
-    // Mata (cornea) — sempat di-revert total ke material bawaan GLB buat
-    // ngetes apakah "hitam"-nya itu emang bug asli dari file-nya sendiri
-    // (bukan efek samping dari perubahan2 sebelumnya) — user konfirmasi
-    // TETEP HITAM di raw/unmodified material juga, jadi ini terbukti bug
-    // asli si file GLB (cornea mesh Z-FIGHTING sama geometry eye-socket yg
-    // posisinya nyaris coincident secara depth — kalah z-fight = pixel-nya
-    // gak pernah ke-draw, regardless material/warna apapun). Pasang balik
-    // fix-nya: polygonOffset ngegeser depth-value EFEKTIF cornea sedikit
-    // lebih deket ke kamera TANPA gerakin geometry beneran (occlusion asli
-    // dari kelopak mata pas merem tetep jalan normal). MeshBasicMaterial
-    // (unlit) + texture asli (map) — gak flat color, biar detail
-    // iris/sclera foto aslinya keliatan natural.
+    // Mata (cornea) — root cause: cornea mesh Z-FIGHTING sama geometry
+    // eye-socket yg posisinya nyaris coincident secara depth (dikonfirmasi
+    // via test raw/unmodified material — user tetep liat hitam, jadi ini
+    // emang bug asli file GLB-nya, bukan efek samping perubahan lain).
+    // 2 percobaan sebelumnya gagal:
+    // 1) polygonOffset (screen-space depth-buffer trick) — dihitung dari
+    //    SLOPE polygon yg berubah sesuai jarak/sudut kamera, jadi gak ada
+    //    satu angka yg pas di semua jarak (AR deket → kurang, Preview3D
+    //    zoom in → kelebihan/nembus).
+    // 2) mesh.scale.multiplyScalar (world-space, tapi scale di OBJECT
+    //    level) — bahkan di 1.15 (15%!) ZERO efek keliatan, baik ukuran
+    //    maupun fix hitamnya. Kemungkinan besar local origin/pivot mesh
+    //    ini GAK ada di tengah bola mata sendiri (skinned mesh, pivot
+    //    ngikut posisi bone/armature) — jadi scale di sekitar pivot yg
+    //    "salah tempat" itu gak nginflate permukaan yg keliatan.
+    // Fix yg akhirnya BENER: modifikasi GEOMETRY langsung — dorong tiap
+    // VERTEX keluar sepanjang normal-nya sendiri (per-vertex, gak gantung
+    // pivot/origin object sama sekali). Ini world-space beneran & pivot-
+    // independent, jadi konsisten di jarak/sudut kamera manapun.
     const isEye = /^MI_Eye/i.test(texName);
     if (isEye) {
+      const geom = mesh.geometry.clone(); // clone — jangan mutate geometry yg mungkin di-share
+      const pos = geom.attributes.position;
+      const norm = geom.attributes.normal;
+      const inflate = 0.004; // world-space units (kecil — cuma buat nembus z-fight margin)
+      for (let vi = 0; vi < pos.count; vi++) {
+        pos.setXYZ(
+          vi,
+          pos.getX(vi) + norm.getX(vi) * inflate,
+          pos.getY(vi) + norm.getY(vi) * inflate,
+          pos.getZ(vi) + norm.getZ(vi) * inflate
+        );
+      }
+      pos.needsUpdate = true;
+      mesh.geometry = geom;
+
       const basic = new THREE.MeshBasicMaterial({
         map: m.map,
         side: m.side,
@@ -220,15 +242,6 @@ export function setupMaterials(mesh) {
         opacity: m.opacity,
       });
       basic.toneMapped = false;
-      basic.polygonOffset = true;
-      // -4 cukup buat menangin z-fight di SATU pose yg dites, tapi cornea
-      // ini nempel di skinned mesh (ikut deform pas kelopak gerak/blink/
-      // gaze rotation) — margin z-fight-nya GAK konstan sepanjang animasi,
-      // jadi offset kecil bisa kalah lagi di pose lain. Dinaikin ke -10
-      // buat headroom lebih gede, robust di seluruh rentang gerakan
-      // kelopak, bukan cuma di pose yg kebetulan kena tes.
-      basic.polygonOffsetFactor = -10;
-      basic.polygonOffsetUnits = -10;
       if (isArray) mesh.material[i] = basic;
       else mesh.material = basic;
       return;
