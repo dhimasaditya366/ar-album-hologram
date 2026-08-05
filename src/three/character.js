@@ -241,6 +241,28 @@ export function setupMaterials(mesh) {
         opacity: m.opacity,
       });
       basic.toneMapped = false;
+      // Bug lain (BEDA dari z-fighting di atas): UV itu attribute TETAP di
+      // permukaan mesh, gak ikut gerak pas bola mata rotasi (gaze, bone-
+      // driven) — yg gerak itu permukaan MANA yg lagi ngadep kamera.
+      // Texture iris/sclera cuma dilukis di satu "kap depan" bola mata;
+      // sisi/belakangnya (normalnya ketutup kelopak, gak pernah keliatan)
+      // cuma backing/padding GELAP di atlas yg sama. Begitu gaze gerak,
+      // permukaan LAIN (UV beda, area padding gelap itu) bisa ikut ke-expose
+      // di sisi/tepi lubang mata — itu "hitam di sisi2" & "hitam di
+      // belakang pupil pas gerak" yg dilaporin, BUKAN z-fighting lagi (udah
+      // dibenerin duluan), ini soal UV-exposure. Inflate geometry gak bisa
+      // benerin ini. Fix: clamp warna hasil sample texture ke floor warna
+      // mata (coklat hangat) — area yg SUDAH terang (iris/sclera asli)
+      // gak kesentuh (udah di atas floor), area yg GELAP (padding/backing
+      // yg ke-expose) diangkat ke floor, jadi gak akan pernah jatuh ke
+      // hitam lagi dari sudut gaze manapun.
+      basic.onBeforeCompile = (shader) => {
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <map_fragment>',
+          `#include <map_fragment>
+          diffuseColor.rgb = max(diffuseColor.rgb, vec3(0.28, 0.19, 0.12));`
+        );
+      };
       if (isArray) mesh.material[i] = basic;
       else mesh.material = basic;
       return;
