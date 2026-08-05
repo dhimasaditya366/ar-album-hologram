@@ -199,43 +199,11 @@ export function setupMaterials(mesh) {
       return;
     }
 
-    // Mata (cornea) — root cause akhirnya ketemu: BUKAN soal warna/lighting
-    // material sama sekali (6 percobaan sebelumnya semua gagal krn ini) —
-    // cornea mesh Z-FIGHTING sama geometry eye-socket yg posisinya nyaris
-    // coincident secara depth. Kalah z-fight = pixel-nya gak pernah
-    // ke-draw, regardless material/warna apapun. Diverifikasi lewat
-    // depthTest:false (warna langsung keliatan, walau occlusion-nya ikut
-    // ilang) — z-fight ini sensitif ke precision floating-point GPU yg
-    // beda antara software-rendering (testing environment) vs GPU hardware
-    // asli (device user), itu kenapa berkali-kali "keverifikasi bener" di
-    // testing tapi tetep hitam di HP.
-    // Fix: polygonOffset nge-geser depth-value EFEKTIF cornea sedikit
-    // lebih deket ke kamera TANPA gerakin geometry beneran — cukup buat
-    // menangin z-fight yg nyaris seri, occlusion asli (kelopak nutupin
-    // mata pas merem) tetep jalan normal krn depthTest tetep nyala.
-    // MeshBasicMaterial (unlit) dipilih drpd StandardMaterial biar gak ada
-    // dependency ke lighting rig sama sekali. PAKE texture asli (map),
-    // BUKAN flat color — percobaan flat color sempat dicoba pas belum tau
-    // root cause-nya (buat ngindarin resiko UV rotation ikut gaze nyampe
-    // area kosong texture-nya), tapi hasilnya keliatan "berantakan"/gak
-    // natural drpd foto asli iris/sclera-nya. Sekarang z-fight-nya udah
-    // ke-fix, texture aslinya aman dipasang balik.
-    const isEye = /^MI_Eye/i.test(texName);
-    if (isEye) {
-      const basic = new THREE.MeshBasicMaterial({
-        map: m.map,
-        side: m.side,
-        transparent: m.transparent,
-        opacity: m.opacity,
-      });
-      basic.toneMapped = false;
-      basic.polygonOffset = true;
-      basic.polygonOffsetFactor = -4;
-      basic.polygonOffsetUnits = -4;
-      if (isArray) mesh.material[i] = basic;
-      else mesh.material = basic;
-      return;
-    }
+    // Mata (cornea) — semua custom treatment (clearcoat/emissive/flat-color/
+    // MeshBasicMaterial/polygonOffset, berbagai percobaan) di-REVERT total
+    // atas permintaan user, balik ke material bawaan GLB apa adanya (cuma
+    // kena envMapIntensity=0.55 generic di atas, sama kayak material lain
+    // yg gak ke-match kategori manapun di bawah ini).
 
     // Kulit — material aslinya MeshStandardMaterial polos, roughness FLAT
     // (gak ada roughnessMap) → itu penyebab kesan "plastic/waxy": T-zone
