@@ -80,7 +80,11 @@ export default function ARScene({ onBack }) {
     container.appendChild(overlayRenderer.domElement);
 
     const overlayScene  = new THREE.Scene();
-    const overlayCamera = new THREE.PerspectiveCamera(60, W / H, 0.01, 100);
+    // near/far diperketet sama kayak Preview3D (0.01/100 → 0.05/15) — rasio
+    // yg kegedean boros depth-buffer precision, kontribusi ke z-fighting
+    // cornea/eye-socket yg sensitif. Hologram di AR jaraknya fixed ~2 unit
+    // dari kamera (gak ada zoom dinamis), jadi 15 far-plane udah generous.
+    const overlayCamera = new THREE.PerspectiveCamera(60, W / H, 0.05, 15);
     // Jarak digeser lebih deket (2.5 → 1.7) — tapi 1.3 (percobaan pertama)
     // ternyata KETERUSAN deket begitu platform-nya ditambahin: platform
     // nambah tinggi total yg perlu muat di frame (karakter + platform di

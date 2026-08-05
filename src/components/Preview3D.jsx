@@ -66,7 +66,17 @@ function setupRenderer(container, width, height) {
 /* Camera                                                                   */
 /* ────────────────────────────────────────────────────────────────────── */
 function setupCamera(width, height) {
-  const camera = new THREE.PerspectiveCamera(36, width / height, 0.01, 100);
+  // near/far dulu 0.01/100 — rasio 10.000:1 buat scene yg SEBENERNYA cuma
+  // kepake 0-10 unit doang (karakter+platform ~3 unit, OrbitControls
+  // minDistance 1.2/maxDistance 6). Depth-buffer precision itu dibagi
+  // sesuai rasio near/far — rasio segede itu BOROS parah, sisa presisi yg
+  // beneran nyampe ke jarak yg dipake (deket cornea vs eye-socket, z-fight
+  // dari bug lain) jadi tipis banget & gampang salah round di GPU tertentu.
+  // Diperketet ke 0.1/20 (rasio 200:1, 50x lebih presisi) — masih jauh
+  // lebih dari cukup buat minDistance 1.2/maxDistance 6, tapi depth-buffer
+  // yg kepake sekarang jauh lebih presisi buat z-fighting yg sensitif kayak
+  // cornea/eye-socket.
+  const camera = new THREE.PerspectiveCamera(36, width / height, 0.1, 20);
   // Sedikit di atas eye-level karakter, diagonal — bukan lurus depan flat.
   // fov sempit (36 vs default three.js 50/60) butuh jarak lebih jauh buat
   // framing yg sama — jangan disamain angka posisi kalau ganti fov.
