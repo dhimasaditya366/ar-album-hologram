@@ -223,7 +223,14 @@ export function setupMaterials(mesh) {
       const geom = mesh.geometry.clone(); // clone — jangan mutate geometry yg mungkin di-share
       const pos = geom.attributes.position;
       const norm = geom.attributes.normal;
-      const inflate = 0.004; // world-space units (kecil — cuma buat nembus z-fight margin)
+      // Bola mata radius-nya cuma ~0.014 unit (diukur langsung) — inflate
+      // 0.004 (percobaan pertama) ternyata ~28% dari radius sendiri,
+      // KEGEDEAN → permukaannya nembus/nutupin kelopak mata di sekitarnya
+      // ("kelopak ilang"). Diturunin ke 0.0012 (~8-9% radius) — dites di 3
+      // jarak kamera beda (jauh/sedang/deket), masih cukup buat nembus
+      // z-fight margin tapi kelopak mata tetep keliatan natural, gak
+      // ketutupan.
+      const inflate = 0.0012;
       for (let vi = 0; vi < pos.count; vi++) {
         pos.setXYZ(
           vi,
