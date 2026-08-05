@@ -223,6 +223,26 @@ export function setupMaterials(mesh) {
         opacity: m.opacity,
       });
       basic.toneMapped = false;
+      // Root cause KETEMU (setelah 5 percobaan lain gagal): ini SAMA SEKALI
+      // bukan soal warna/lighting material — cornea mesh Z-FIGHTING sama
+      // geometry eye-socket yg posisinya nyaris coincident secara depth.
+      // Kalah z-fight = pixel-nya gak pernah ke-draw, regardless warna
+      // apapun yg dipasang di material-nya. Diverifikasi lewat depthTest:
+      // false — begitu depth-test dimatiin, warna coklat-nya LANGSUNG
+      // keliatan (walau jadi nembus di posisi salah krn occlusion-nya ikut
+      // ilang). Z-fight itu sensitif ke precision floating-point GPU, yg
+      // beda antara software-rendering (environment testing otomatis —
+      // kebetulan menang) vs GPU hardware asli (device user — kalah) —
+      // itu kenapa berkali-kali "keverifikasi bener" di testing tapi tetep
+      // hitam di HP user.
+      // Fix yg BENER (bukan depthTest:false): polygonOffset nge-geser
+      // depth-value EFEKTIF cornea sedikit lebih deket ke kamera TANPA
+      // gerakin geometry beneran — cukup buat menangin z-fight yg nyaris
+      // seri, tapi occlusion asli (kelopak nutupin mata pas merem) tetep
+      // jalan normal krn depthTest tetep nyala.
+      basic.polygonOffset = true;
+      basic.polygonOffsetFactor = -4;
+      basic.polygonOffsetUnits = -4;
       if (isArray) mesh.material[i] = basic;
       else mesh.material = basic;
       return;
